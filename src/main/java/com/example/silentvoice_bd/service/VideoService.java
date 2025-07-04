@@ -5,6 +5,7 @@ package com.example.silentvoice_bd.service;
 import com.example.silentvoice_bd.config.FileStorageProperties;
 import com.example.silentvoice_bd.exception.FileUploadException;
 import com.example.silentvoice_bd.model.VideoFile;
+import com.example.silentvoice_bd.processing.VideoProcessingService;
 import com.example.silentvoice_bd.repository.VideoRepository;
 import org.apache.tika.Tika;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,13 +31,16 @@ public class VideoService {
 
     private final VideoRepository videoRepository;
     private final FileStorageProperties fileStorageProperties;
+    private final VideoProcessingService videoProcessingService;
     private final Tika tika = new Tika();
     private Path fileStorageLocation;
 
     @Autowired
-    public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties) {
+    public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties, 
+                        VideoProcessingService videoProcessingService) {
         this.videoRepository = videoRepository;
         this.fileStorageProperties = fileStorageProperties;
+        this.videoProcessingService = videoProcessingService;
     }
 
     @PostConstruct
@@ -74,7 +78,13 @@ public class VideoService {
             );
             videoFile.setDescription(description);
 
-            return videoRepository.save(videoFile);
+            // Save the video file to the database
+            VideoFile savedVideo = videoRepository.save(videoFile);
+
+            // Automatically trigger video processing
+            videoProcessingService.processVideoAsync(savedVideo.getId());
+
+            return savedVideo;
 
         } catch (IOException ex) {
             throw new FileUploadException("Could not store file " + originalFilename + ". Please try again!", ex);

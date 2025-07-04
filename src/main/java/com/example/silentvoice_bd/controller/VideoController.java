@@ -1,10 +1,9 @@
 package com.example.silentvoice_bd.controller;
 
-
-
 import com.example.silentvoice_bd.dto.VideoUploadResponse;
 import com.example.silentvoice_bd.model.VideoFile;
 import com.example.silentvoice_bd.service.VideoService;
+import com.example.silentvoice_bd.processing.VideoProcessingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -24,10 +23,12 @@ import java.util.UUID;
 public class VideoController {
 
     private final VideoService videoService;
+    private final VideoProcessingService videoProcessingService;
 
     @Autowired
-    public VideoController(VideoService videoService) {
+    public VideoController(VideoService videoService, VideoProcessingService videoProcessingService) {
         this.videoService = videoService;
+        this.videoProcessingService = videoProcessingService;
     }
 
     @PostMapping("/upload")
@@ -37,6 +38,9 @@ public class VideoController {
 
         VideoFile savedVideo = videoService.storeVideoFile(file, description);
 
+        // Start processing automatically after upload!
+        videoProcessingService.processVideoAsync(savedVideo.getId());
+
         VideoUploadResponse response = new VideoUploadResponse(
             savedVideo.getId(),
             savedVideo.getFilename(),
@@ -44,7 +48,7 @@ public class VideoController {
             savedVideo.getContentType(),
             savedVideo.getFileSize(),
             savedVideo.getUploadTimestamp(),
-            "Video uploaded successfully!"
+            "Video uploaded and processing started!"
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -100,4 +104,3 @@ public class VideoController {
                        .orElse(ResponseEntity.notFound().build());
     }
 }
-
