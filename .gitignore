@@ -1,5 +1,18 @@
-# Maven
+# Maven & Java
 target/
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+*.log
+*.tmp
+*.sw?
+hs_err_pid*
+*.ctxt
+.mtj.tmp/
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -8,156 +21,60 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-
-# Maven Wrapper
 .mvn/wrapper/maven-wrapper.jar
 
-# Gradle (if ever used)
-.gradle/
-build/
-
-# IntelliJ IDEA
+# IDEs & Editors
 .idea/
 *.iws
 *.iml
 *.ipr
 out/
-
-# Eclipse
-.classpath
-.project
-.settings/
-.apt_generated/
-.factorypath
-.springBeans
-.sts4-cache
-.metadata/
-bin/
-tmp/
-*.tmp
-*.bak
-*.swp
-*~.nib
-local.properties
-.loadpath
-.recommenders/
-.externalToolBuilders/
+.vscode/
 *.launch
 *.pydevproject
-.cproject
-.autotools
-.buildpath
-.target
-.tern-project
-.texlipse
-.cache-main
-.scala_dependencies
-.worksheet
+*.project
+*.classpath
+.settings/
+*.sublime-*
+*.swp
 
-# NetBeans
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-# VS Code
-.vscode/
-
-# OS-specific
-.DS_Store
-Thumbs.db
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-
-# Java
-*.class
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-hs_err_pid*
-*.ctxt
-.mtj.tmp/
-
-# Logs and temp files
-logs/
-*.log
-*.log.*
-*.tmp
-
-# Environment files and secrets
-.env
-application.properties
-application.yml
-
-# Git backup/merge files
-*.orig
-*.BACKUP.*
-*.BASE.*
-*.LOCAL.*
-*.REMOTE.*
-*_BACKUP_*.txt
-*_BASE_*.txt
-*_LOCAL_*.txt
-*_REMOTE_*.txt
-
-# Misc
-*.sw?
-.#*
-*#
-*~
-.sublime-*
-/scratch
-README.html
-.exercism
-
-# Do not ignore Maven wrapper JAR
-!/.mvn/wrapper/maven-wrapper.jar
-
-# Python Virtual Environment
+# Python
 ai-env/
 .venv/
 venv/
 env/
-
-# Python Cache Files
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# AI Model Files (large files)
-*.h5
-*.pkl
-*.onnx
-*.pb
+# Data, Models, and Large Files
+uploads/frames/
+uploads/thumbnails/
+uploads/videos/
+dataset/
+datasets/
+data/
+python-ai/data/
 python-ai/trained_models/
-src/main/resources/ai-models/*.h5
+python-ai/__pycache__/
+python-ai/scripts/__pycache__/
+*.h5
+*.onnx
+*.pkl
+*.pb
+*.keras
 
-# Temporary AI Files
-python-ai/data/temp/
-python-ai/scripts/temp/
+# Jupyter
+.ipynb_checkpoints/
 
-# TensorFlow Logs
+# Logs
 logs/
 tensorboard_logs/
 
-# Jupyter Notebook Checkpoints
-.ipynb_checkpoints/
-
-# OS Generated Files
+# OS/Temp
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
+$RECYCLE.BIN/
