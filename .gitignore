@@ -120,3 +120,44 @@ README.html
 
 # Do not ignore Maven wrapper JAR
 !/.mvn/wrapper/maven-wrapper.jar
+
+# Python Virtual Environment
+ai-env/
+.venv/
+venv/
+env/
+
+# Python Cache Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# AI Model Files (large files)
+*.h5
+*.pkl
+*.onnx
+*.pb
+python-ai/trained_models/
+src/main/resources/ai-models/*.h5
+
+# Temporary AI Files
+python-ai/data/temp/
+python-ai/scripts/temp/
+
+# TensorFlow Logs
+logs/
+tensorboard_logs/
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

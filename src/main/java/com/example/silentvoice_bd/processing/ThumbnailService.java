@@ -1,21 +1,24 @@
 package com.example.silentvoice_bd.processing;
 
-import com.example.silentvoice_bd.config.VideoProcessingConfiguration;
-import com.example.silentvoice_bd.model.VideoFile;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import javax.imageio.ImageIO;
+
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.Java2DFrameConverter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.imageio.ImageIO;
-import java.awt.*;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
+import com.example.silentvoice_bd.config.VideoProcessingConfiguration;
+import com.example.silentvoice_bd.model.VideoFile;
+//import java.util.UUID;
 
 @Service
 public class ThumbnailService {
@@ -42,19 +45,20 @@ public class ThumbnailService {
             Frame frame = grabber.grabImage();
 
             if (frame != null) {
-                Java2DFrameConverter converter = new Java2DFrameConverter();
-                BufferedImage originalImage = converter.convert(frame);
+                try (Java2DFrameConverter converter = new Java2DFrameConverter()) {
+                    BufferedImage originalImage = converter.convert(frame);
 
-                if (originalImage != null) {
-                    // Resize image to thumbnail size
-                    BufferedImage thumbnailImage = resizeImage(
-                        originalImage,
-                        config.getThumbnailWidth(),
-                        config.getThumbnailHeight()
-                    );
+                    if (originalImage != null) {
+                        // Resize image to thumbnail size
+                        BufferedImage thumbnailImage = resizeImage(
+                            originalImage,
+                            config.getThumbnailWidth(),
+                            config.getThumbnailHeight()
+                        );
 
-                    ImageIO.write(thumbnailImage, "jpg", thumbnailFile);
-                    return thumbnailFile.getAbsolutePath();
+                        ImageIO.write(thumbnailImage, "jpg", thumbnailFile);
+                        return thumbnailFile.getAbsolutePath();
+                    }
                 }
             }
 
@@ -98,7 +102,7 @@ public class ThumbnailService {
         if (thumbnailPath != null) {
             try {
                 Files.deleteIfExists(Paths.get(thumbnailPath));
-            } catch (Exception e) {
+            } catch (java.io.IOException e) {
                 System.err.println("Failed to delete thumbnail: " + thumbnailPath);
             }
         }

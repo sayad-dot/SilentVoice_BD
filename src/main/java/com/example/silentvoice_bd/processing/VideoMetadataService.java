@@ -1,18 +1,19 @@
 package com.example.silentvoice_bd.processing;
 
-import com.example.silentvoice_bd.model.VideoFile;
-import com.example.silentvoice_bd.model.VideoMetadata;
-import com.example.silentvoice_bd.repository.VideoMetadataRepository;
-import ws.schild.jave.Encoder;
-import ws.schild.jave.MultimediaObject;
-import ws.schild.jave.info.MultimediaInfo;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.io.File;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.example.silentvoice_bd.model.VideoFile;
+import com.example.silentvoice_bd.model.VideoMetadata;
+import com.example.silentvoice_bd.repository.VideoMetadataRepository;
+
+import ws.schild.jave.MultimediaObject;
+import ws.schild.jave.info.MultimediaInfo;
 
 @Service
 public class VideoMetadataService {

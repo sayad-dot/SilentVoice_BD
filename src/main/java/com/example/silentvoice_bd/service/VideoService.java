@@ -2,20 +2,6 @@ package com.example.silentvoice_bd.service;
 
 
 
-import com.example.silentvoice_bd.config.FileStorageProperties;
-import com.example.silentvoice_bd.exception.FileUploadException;
-import com.example.silentvoice_bd.model.VideoFile;
-import com.example.silentvoice_bd.processing.VideoProcessingService;
-import com.example.silentvoice_bd.repository.VideoRepository;
-import org.apache.tika.Tika;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -25,6 +11,22 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.apache.tika.Tika;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.example.silentvoice_bd.config.FileStorageProperties;
+import com.example.silentvoice_bd.exception.FileUploadException;
+import com.example.silentvoice_bd.model.VideoFile;
+import com.example.silentvoice_bd.processing.VideoProcessingService;
+import com.example.silentvoice_bd.repository.VideoRepository;
+
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class VideoService {
@@ -59,7 +61,10 @@ public class VideoService {
         validateVideoFile(file);
 
         // Generate unique filename
-        String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
+        String originalFilenameRaw = file.getOriginalFilename();
+        String originalFilename = StringUtils.cleanPath(
+            originalFilenameRaw != null ? originalFilenameRaw : "unknown"
+        );
         String fileExtension = getFileExtension(originalFilename);
         String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
 
