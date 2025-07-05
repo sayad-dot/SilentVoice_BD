@@ -4,6 +4,7 @@ import com.example.silentvoice_bd.dto.VideoUploadResponse;
 import com.example.silentvoice_bd.model.VideoFile;
 import com.example.silentvoice_bd.service.VideoService;
 import com.example.silentvoice_bd.processing.VideoProcessingService;
+import com.example.silentvoice_bd.ai.services.AIProcessingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -16,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/videos")
@@ -24,22 +26,42 @@ public class VideoController {
 
     private final VideoService videoService;
     private final VideoProcessingService videoProcessingService;
+    private final AIProcessingService aiProcessingService;
 
     @Autowired
-    public VideoController(VideoService videoService, VideoProcessingService videoProcessingService) {
+    public VideoController(
+            VideoService videoService,
+            VideoProcessingService videoProcessingService,
+            AIProcessingService aiProcessingService
+    ) {
         this.videoService = videoService;
         this.videoProcessingService = videoProcessingService;
+        this.aiProcessingService = aiProcessingService;
     }
 
     @PostMapping("/upload")
     public ResponseEntity<VideoUploadResponse> uploadVideo(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "description", required = false) String description) {
-
+            @RequestParam(value = "description", required = false) String description,
+            @RequestParam(value = "enableAI", defaultValue = "true") boolean enableAI
+    ) {
         VideoFile savedVideo = videoService.storeVideoFile(file, description);
 
-        // Start processing automatically after upload!
+        // Start video processing (extract frames, etc.)
         videoProcessingService.processVideoAsync(savedVideo.getId());
+
+        // Optionally start AI processing after a delay (to allow frame extraction)
+        if (enableAI) {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // Wait 15 seconds for frame extraction (adjust as needed)
+                    Thread.sleep(15000);
+                    aiProcessingService.processVideoAsync(savedVideo.getId());
+                } catch (Exception e) {
+                    System.err.println("AI processing failed for video " + savedVideo.getId() + ": " + e.getMessage());
+                }
+            });
+        }
 
         VideoUploadResponse response = new VideoUploadResponse(
             savedVideo.getId(),
@@ -48,7 +70,9 @@ public class VideoController {
             savedVideo.getContentType(),
             savedVideo.getFileSize(),
             savedVideo.getUploadTimestamp(),
-            "Video uploaded and processing started!"
+            enableAI
+                ? "Video uploaded, processing and AI analysis started!"
+                : "Video uploaded and processing started!"
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -65,15 +89,12 @@ public class VideoController {
         Resource resource = videoService.loadVideoFileAsResource(id);
         Optional<VideoFile> videoFile = videoService.getVideoFile(id);
 
-        if (videoFile.isPresent()) {
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(videoFile.get().getContentType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                           "attachment; filename=\"" + videoFile.get().getOriginalFilename() + "\"")
-                    .body(resource);
-        }
+        return videoFile.map(file -> ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + file.getOriginalFilename() + "\"")
+                .body(resource)).orElseGet(() -> ResponseEntity.notFound().build());
 
-        return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/{id}/stream")
@@ -81,14 +102,11 @@ public class VideoController {
         Resource resource = videoService.loadVideoFileAsResource(id);
         Optional<VideoFile> videoFile = videoService.getVideoFile(id);
 
-        if (videoFile.isPresent()) {
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(videoFile.get().getContentType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
-                    .body(resource);
-        }
+        return videoFile.map(file -> ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.getContentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .body(resource)).orElseGet(() -> ResponseEntity.notFound().build());
 
-        return ResponseEntity.notFound().build();
     }
 
     @DeleteMapping("/{id}")
