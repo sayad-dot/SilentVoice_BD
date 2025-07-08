@@ -13,7 +13,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.tika.Tika;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -37,7 +36,7 @@ public class VideoService {
     private final Tika tika = new Tika();
     private Path fileStorageLocation;
 
-    @Autowired
+   
     public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties, 
                         VideoProcessingService videoProcessingService) {
         this.videoRepository = videoRepository;

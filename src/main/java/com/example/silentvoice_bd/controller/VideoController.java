@@ -1,23 +1,30 @@
 package com.example.silentvoice_bd.controller;
 
-import com.example.silentvoice_bd.dto.VideoUploadResponse;
-import com.example.silentvoice_bd.model.VideoFile;
-import com.example.silentvoice_bd.service.VideoService;
-import com.example.silentvoice_bd.processing.VideoProcessingService;
-import com.example.silentvoice_bd.ai.services.AIProcessingService;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import com.example.silentvoice_bd.ai.services.AIProcessingService;
+import com.example.silentvoice_bd.dto.VideoUploadResponse;
+import com.example.silentvoice_bd.model.VideoFile;
+import com.example.silentvoice_bd.processing.VideoProcessingService;
+import com.example.silentvoice_bd.service.VideoService;
 
 @RestController
 @RequestMapping("/api/videos")
@@ -28,7 +35,7 @@ public class VideoController {
     private final VideoProcessingService videoProcessingService;
     private final AIProcessingService aiProcessingService;
 
-    @Autowired
+   // @Autowired
     public VideoController(
             VideoService videoService,
             VideoProcessingService videoProcessingService,
@@ -57,8 +64,9 @@ public class VideoController {
                     // Wait 15 seconds for frame extraction (adjust as needed)
                     Thread.sleep(15000);
                     aiProcessingService.processVideoAsync(savedVideo.getId());
-                } catch (Exception e) {
+                } catch (InterruptedException | RuntimeException e) {
                     System.err.println("AI processing failed for video " + savedVideo.getId() + ": " + e.getMessage());
+                    Thread.currentThread().interrupt();
                 }
             });
         }
