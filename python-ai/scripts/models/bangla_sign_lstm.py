@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 import numpy as np
 import tensorflow as tf
-from keras.models import Sequential, load_model
-from keras.layers import LSTM, Dense, Dropout, BatchNormalization
-import pickle
-import json
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout, BatchNormalization, Input
 import os
 
 class BanglaSignLanguageLSTM:
@@ -13,12 +11,12 @@ class BanglaSignLanguageLSTM:
         self.num_classes = num_classes
         self.feature_dim = 258
         self.model = None
-        self.label_encoder = None
         
     def build_model(self):
-        """Build LSTM model architecture"""
+        """Build LSTM model architecture with proper Input layer"""
         model = Sequential([
-            LSTM(128, return_sequences=True, input_shape=(self.sequence_length, self.feature_dim)),
+            Input(shape=(self.sequence_length, self.feature_dim)),
+            LSTM(128, return_sequences=True),
             Dropout(0.3),
             BatchNormalization(),
             
@@ -46,11 +44,11 @@ class BanglaSignLanguageLSTM:
         return model
     
     def create_demo_model(self):
-        """Create a demo model for testing when real model is not available"""
+        """Create a demo model for testing"""
         if self.model is None:
             self.build_model()
         
-        # Initialize with random weights for demo purposes
+        # Initialize with random weights
         dummy_input = np.random.random((1, self.sequence_length, self.feature_dim))
         _ = self.model.predict(dummy_input, verbose=0)
         
@@ -63,7 +61,7 @@ class BanglaSignLanguageLSTM:
     def load_model(self, model_path):
         """Load trained model"""
         try:
-            self.model = load_model(model_path)
+            self.model = tf.keras.models.load_model(model_path)
             return True
         except Exception as e:
             print(f"Error loading model: {e}")
