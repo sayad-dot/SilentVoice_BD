@@ -1,82 +1,89 @@
-import axios from 'axios';
+const API_BASE_URL = 'http://localhost:8080/api';
 
-const API_BASE_URL = 'http://localhost:8080/api/videos';
+class VideoService {
+  uploadVideo(file, description = '', enableAI = true, onProgress = null) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData();
 
-const videoService = {
-  // Upload a video file
-  uploadVideo: async (file, description = '', onUploadProgress = null) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (description) {
-      formData.append('description', description);
-    }
+      formData.append('file', file);
+      if (description) formData.append('description', description);
+      formData.append('enableAI', enableAI.toString());
 
-    const config = {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      // Set timeout to 5 minutes for large uploads
-      timeout: 300000,
-    };
-
-    if (onUploadProgress) {
-      config.onUploadProgress = onUploadProgress;
-    }
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/upload`, formData, config);
-      return response.data;
-    } catch (error) {
-      console.error('Upload error:', error);
-      if (error.code === 'ECONNABORTED') {
-        throw 'Upload timed out. Please try again with a smaller file or check your network connection.';
-      } else if (!error.response) {
-        throw 'Network error. Please check your internet connection and try again.';
-      } else {
-        throw error.response?.data || error.message;
+      // Progress event
+      if (onProgress && typeof onProgress === 'function') {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            onProgress({
+              loaded: event.loaded,
+              total: event.total,
+              progress: (event.loaded / event.total) * 100
+            });
+          }
+        });
       }
-    }
-  },
 
-  // Get all uploaded videos
-  getAllVideos: async () => {
-    try {
-      const response = await axios.get(API_BASE_URL);
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const response = JSON.parse(xhr.responseText);
+            resolve(response);
+          } catch (e) {
+            reject(new Error('Invalid JSON response'));
+          }
+        } else {
+          reject(new Error(`Upload failed with status: ${xhr.status} - ${xhr.statusText}`));
+        }
+      };
 
-  // Get video info
-  getVideoInfo: async (videoId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/${videoId}/info`);
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
+      xhr.onerror = function () {
+        reject(new Error('Network error during upload'));
+      };
 
-  // Delete a video
-  deleteVideo: async (videoId) => {
-    try {
-      const response = await axios.delete(`${API_BASE_URL}/${videoId}`);
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
+      xhr.ontimeout = function () {
+        reject(new Error('Upload timed out'));
+      };
 
-  // Get video stream URL
-  getVideoStreamUrl: (videoId) => {
-    return `${API_BASE_URL}/${videoId}/stream`;
-  },
+      xhr.open('POST', `${API_BASE_URL}/videos/upload`);
+      xhr.timeout = 300000; // 5 minutes
 
-  // Get video download URL
-  getVideoDownloadUrl: (videoId) => {
-    return `${API_BASE_URL}/${videoId}`;
+      xhr.send(formData);
+    });
   }
-};
 
-export default videoService;
+  getVideoStreamUrl(videoId) {
+    return `${API_BASE_URL}/videos/${videoId}/stream`;
+  }
+
+  async getVideoInfo(videoId) {
+    const response = await fetch(`${API_BASE_URL}/videos/${videoId}/info`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch video info');
+    }
+    return await response.json();
+  }
+
+  async deleteVideo(videoId) {
+    const response = await fetch(`${API_BASE_URL}/videos/${videoId}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete video');
+    }
+    return await response.text();
+  }
+
+  async getAllVideos() {
+    const response = await fetch(`${API_BASE_URL}/videos`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch videos');
+    }
+    return await response.json();
+  }
+
+  getVideoDownloadUrl(videoId) {
+    return `${API_BASE_URL}/videos/${videoId}`;
+  }
+}
+
+export default new VideoService();

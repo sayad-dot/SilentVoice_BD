@@ -1,10 +1,15 @@
 package com.example.silentvoice_bd.controller;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,11 +36,12 @@ import com.example.silentvoice_bd.service.VideoService;
 @CrossOrigin(origins = "http://localhost:3000")
 public class VideoController {
 
+    private static final Logger logger = LoggerFactory.getLogger(VideoController.class);
+
     private final VideoService videoService;
     private final VideoProcessingService videoProcessingService;
     private final AIProcessingService aiProcessingService;
 
-   // @Autowired
     public VideoController(
             VideoService videoService,
             VideoProcessingService videoProcessingService,
@@ -57,34 +63,108 @@ public class VideoController {
         // Start video processing (extract frames, etc.)
         videoProcessingService.processVideoAsync(savedVideo.getId());
 
-        // Optionally start AI processing after a delay (to allow frame extraction)
+        // Start AI processing after a delay (to allow frame extraction)
         if (enableAI) {
             CompletableFuture.runAsync(() -> {
                 try {
-                    // Wait 15 seconds for frame extraction (adjust as needed)
+                    // Wait 15 seconds for frame extraction
                     Thread.sleep(15000);
                     aiProcessingService.processVideoAsync(savedVideo.getId());
                 } catch (InterruptedException | RuntimeException e) {
-                    System.err.println("AI processing failed for video " + savedVideo.getId() + ": " + e.getMessage());
+                    logger.error("AI processing failed for video {}: {}", savedVideo.getId(), e.getMessage(), e);
                     Thread.currentThread().interrupt();
                 }
             });
         }
 
         VideoUploadResponse response = new VideoUploadResponse(
-            savedVideo.getId(),
-            savedVideo.getFilename(),
-            savedVideo.getOriginalFilename(),
-            savedVideo.getContentType(),
-            savedVideo.getFileSize(),
-            savedVideo.getUploadTimestamp(),
-            enableAI
-                ? "Video uploaded, processing and AI analysis started!"
-                : "Video uploaded and processing started!"
+                savedVideo.getId(),
+                savedVideo.getFilename(),
+                savedVideo.getOriginalFilename(),
+                savedVideo.getContentType(),
+                savedVideo.getFileSize(),
+                savedVideo.getUploadTimestamp(),
+                enableAI
+                        ? "Video uploaded, processing and AI analysis started!"
+                        : "Video uploaded and processing started!"
         );
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    @GetMapping("/{id}/status")
+public ResponseEntity<Map<String, Object>> getVideoStatus(@PathVariable UUID id) {
+    try {
+        Optional<VideoFile> videoFile = videoService.getVideoFile(id);
+        if (videoFile.isEmpty()) {
+            logger.warn("Video not found for ID: {}", id);
+
+            // Return JSON error instead of HTML 404
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", "Video not found");
+            errorResponse.put("videoId", id);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+        }
+
+        Map<String, Object> status = new HashMap<>();
+        status.put("success", true);
+        status.put("videoId", id);
+        status.put("filename", videoFile.get().getOriginalFilename());
+        status.put("uploadTime", videoFile.get().getUploadTimestamp());
+
+        // Check AI processing status
+        try {
+            List<SignLanguagePrediction> predictions = aiProcessingService.getPredictionsByVideoId(id);
+            logger.info("Checking predictions for video {}: found {} predictions", id, predictions.size());
+
+            if (!predictions.isEmpty()) {
+                SignLanguagePrediction latestPrediction = predictions.get(0);
+                status.put("aiComplete", true);
+                status.put("prediction", latestPrediction.getPredictedText());
+                status.put("confidence", latestPrediction.getConfidenceScore());
+                status.put("predictionId", latestPrediction.getId());
+                status.put("modelVersion", latestPrediction.getModelVersion());
+                status.put("processingTime", latestPrediction.getProcessingTimeMs());
+
+                logger.info("Returning AI complete status for video {}: {}", id, latestPrediction.getPredictedText());
+            } else {
+                status.put("aiComplete", false);
+                status.put("status", "AI processing in progress...");
+                logger.info("AI processing still in progress for video {}", id);
+            }
+        } catch (Exception e) {
+            logger.error("Error checking AI prediction status for video {}: {}", id, e.getMessage(), e);
+            status.put("aiComplete", false);
+            status.put("status", "AI processing in progress...");
+            status.put("error", "Error checking prediction status");
+        }
+
+        // Ensure JSON response with proper headers
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(status);
+
+    } catch (Exception e) {
+        logger.error("Error getting video status for ID: {}", id, e);
+
+        // Return JSON error instead of HTML error page
+        Map<String, Object> errorStatus = new HashMap<>();
+        errorStatus.put("success", false);
+        errorStatus.put("error", "Failed to get video status: " + e.getMessage());
+        errorStatus.put("videoId", id);
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(errorStatus);
+    }
+}
+
+
+
+
+
+
 
     @GetMapping
     public ResponseEntity<List<VideoFile>> getAllVideos() {
@@ -102,7 +182,6 @@ public class VideoController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + file.getOriginalFilename() + "\"")
                 .body(resource)).orElseGet(() -> ResponseEntity.notFound().build());
-
     }
 
     @GetMapping("/{id}/stream")
@@ -114,7 +193,6 @@ public class VideoController {
                 .contentType(MediaType.parseMediaType(file.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
                 .body(resource)).orElseGet(() -> ResponseEntity.notFound().build());
-
     }
 
     @DeleteMapping("/{id}")
@@ -127,6 +205,7 @@ public class VideoController {
     public ResponseEntity<VideoFile> getVideoInfo(@PathVariable UUID id) {
         Optional<VideoFile> videoFile = videoService.getVideoFile(id);
         return videoFile.map(ResponseEntity::ok)
-                       .orElse(ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.notFound().build());
     }
 }
+

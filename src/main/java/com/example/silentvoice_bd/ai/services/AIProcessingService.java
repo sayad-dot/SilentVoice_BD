@@ -14,10 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 @Service
@@ -210,4 +207,18 @@ public class AIProcessingService {
             throw new RuntimeException("Failed to delete predictions: " + e.getMessage(), e);
         }
     }
+    public Optional<SignLanguagePrediction> getLatestPrediction(UUID videoFileId) {
+    try {
+        List<SignLanguagePrediction> predictions = predictionRepository.findByVideoFileIdOrderByCreatedAtDesc(videoFileId);
+        return predictions.isEmpty() ? Optional.empty() : Optional.of(predictions.get(0));
+    } catch (Exception e) {
+        logger.error("Error getting latest prediction for video: " + videoFileId, e);
+        return Optional.empty();
+    }
+}
+
+public boolean hasCompletedPrediction(UUID videoFileId) {
+    return getLatestPrediction(videoFileId).isPresent();
+}
+
 }

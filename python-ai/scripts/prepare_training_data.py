@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 import json
 import os
-from pose_extractor import MediaPipePoseExtractor
+
+from pose_extractor import OptimizedMediaPipePoseExtractor as MediaPipePoseExtractor
 
 
 class TrainingDataPreparer:
@@ -73,6 +74,63 @@ class TrainingDataPreparer:
             'tv': 'টিভি',
         }
 
+    def normalize_features(self, X):
+        """Apply standardization normalization to features"""
+        print("Applying feature normalization...")
+        
+        # Convert to numpy array for easier manipulation
+        X_array = np.array(X)
+        print(f"Original data shape: {X_array.shape}")
+        
+        # Flatten all frames to compute global statistics
+        X_flat = X_array.reshape(-1, X_array.shape[-1])  # (total_frames, features)
+        print(f"Flattened shape for stats: {X_flat.shape}")
+        
+        # Compute mean and std for each feature
+        feature_means = X_flat.mean(axis=0)
+        feature_stds = X_flat.std(axis=0) + 1e-8  # Add small value to avoid division by zero
+        
+        print(f"Feature means range: {feature_means.min():.6f} to {feature_means.max():.6f}")
+        print(f"Feature stds range: {feature_stds.min():.6f} to {feature_stds.max():.6f}")
+        
+        # Apply normalization to all sequences
+        X_normalized = []
+        for sequence in X:
+            sequence = np.array(sequence)
+            sequence_normalized = (sequence - feature_means) / feature_stds
+            X_normalized.append(sequence_normalized.tolist())
+        
+        # Save normalization parameters
+        normalization_params = {
+            'feature_means': feature_means.tolist(),
+            'feature_stds': feature_stds.tolist(),
+            'feature_dim': len(feature_means)
+        }
+        
+        # Save to multiple locations for easy access
+        with open('../data/normalization_params.json', 'w') as f:
+            json.dump(normalization_params, f, indent=2)
+        
+        # Also save as numpy arrays for faster loading
+        np.save('../data/feature_means.npy', feature_means)
+        np.save('../data/feature_stds.npy', feature_stds)
+        
+        print("✅ Normalization parameters saved to:")
+        print("  - ../data/normalization_params.json")
+        print("  - ../data/feature_means.npy")
+        print("  - ../data/feature_stds.npy")
+        
+        # Verify normalization
+        X_normalized_array = np.array(X_normalized)
+        X_normalized_flat = X_normalized_array.reshape(-1, X_normalized_array.shape[-1])
+        
+        print(f"After normalization:")
+        print(f"  Mean: {X_normalized_flat.mean():.6f} (should be ~0)")
+        print(f"  Std: {X_normalized_flat.std():.6f} (should be ~1)")
+        print(f"  Range: {X_normalized_flat.min():.6f} to {X_normalized_flat.max():.6f}")
+        
+        return X_normalized
+
     def prepare_from_extracted_frames(self, frames_root_dir, output_file):
         X, y, labels = [], [], []
         label_counts = {}
@@ -111,20 +169,26 @@ class TrainingDataPreparer:
                 print(f"Error processing {video_dir}: {e}")
                 continue
 
-        # Save training data
+        # *** APPLY NORMALIZATION HERE ***
+        print(f"\nApplying normalization to {len(X)} sequences...")
+        X_normalized = self.normalize_features(X)
+
+        # Save training data with normalized features
         training_data = {
-            'X': X,
+            'X': X_normalized,
             'y': y,
             'labels': list(set(labels)),
-            'num_samples': len(X),
+            'num_samples': len(X_normalized),
             'num_classes': len(set(labels)),
+            'normalized': True,  # Flag to indicate data is normalized
+            'feature_dim': 288
         }
 
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(training_data, f, ensure_ascii=False, indent=2)
 
-        print(f"\nTraining data saved to {output_file}")
-        print(f"Total samples: {len(X)}")
+        print(f"\n✅ Normalized training data saved to {output_file}")
+        print(f"Total samples: {len(X_normalized)}")
         print(f"Unique labels: {len(set(labels))}")
         print("Sample count per label:")
         for label, count in label_counts.items():
