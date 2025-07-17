@@ -11,7 +11,7 @@ class BanglaSignLanguageLSTM:
     def __init__(self, sequence_length=30, num_classes=61):
         self.sequence_length = sequence_length
         self.num_classes = num_classes
-        self.feature_dim = 258
+        self.feature_dim = 288
         self.model = None
         self.label_encoder = None
         

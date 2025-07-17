@@ -5,10 +5,10 @@ import os
 
 from pose_extractor import OptimizedMediaPipePoseExtractor as MediaPipePoseExtractor
 
-
 class TrainingDataPreparer:
     def __init__(self):
-        self.extractor = MediaPipePoseExtractor()
+        # Skip normalization loading during data preparation
+        self.extractor = MediaPipePoseExtractor(skip_normalization_loading=True)
 
         # Full mapping for BDSLW60 (folder name -> Bangla word)
         self.labels = {
@@ -78,9 +78,35 @@ class TrainingDataPreparer:
         """Apply standardization normalization to features"""
         print("Applying feature normalization...")
         
-        # Convert to numpy array for easier manipulation
-        X_array = np.array(X)
-        print(f"Original data shape: {X_array.shape}")
+        # First, ensure all sequences have the same length
+        target_length = 30  # Standard sequence length
+        feature_dim = 288   # Feature dimension per frame
+        
+        print(f"Standardizing sequence lengths to {target_length} frames...")
+        X_standardized = []
+        
+        for i, sequence in enumerate(X):
+            if len(sequence) > target_length:
+                # Truncate to target length
+                seq_fixed = sequence[:target_length]
+            elif len(sequence) < target_length:
+                # Pad with zeros
+                padding_needed = target_length - len(sequence)
+                padding = [[0.0] * feature_dim] * padding_needed
+                seq_fixed = sequence + padding
+            else:
+                seq_fixed = sequence
+            
+            X_standardized.append(seq_fixed)
+            
+            # Progress indicator for large datasets
+            if (i + 1) % 1000 == 0:
+                print(f"  Standardized {i + 1}/{len(X)} sequences")
+        
+        # Now convert to numpy array (should work without errors)
+        print("Converting to numpy array...")
+        X_array = np.array(X_standardized, dtype=np.float32)
+        print(f"Standardized data shape: {X_array.shape}")
         
         # Flatten all frames to compute global statistics
         X_flat = X_array.reshape(-1, X_array.shape[-1])  # (total_frames, features)
@@ -94,20 +120,19 @@ class TrainingDataPreparer:
         print(f"Feature stds range: {feature_stds.min():.6f} to {feature_stds.max():.6f}")
         
         # Apply normalization to all sequences
-        X_normalized = []
-        for sequence in X:
-            sequence = np.array(sequence)
-            sequence_normalized = (sequence - feature_means) / feature_stds
-            X_normalized.append(sequence_normalized.tolist())
+        print("Applying normalization...")
+        X_normalized = (X_array - feature_means) / feature_stds
         
         # Save normalization parameters
         normalization_params = {
             'feature_means': feature_means.tolist(),
             'feature_stds': feature_stds.tolist(),
-            'feature_dim': len(feature_means)
+            'feature_dim': len(feature_means),
+            'sequence_length': target_length
         }
         
         # Save to multiple locations for easy access
+        os.makedirs('../data', exist_ok=True)
         with open('../data/normalization_params.json', 'w') as f:
             json.dump(normalization_params, f, indent=2)
         
@@ -121,15 +146,14 @@ class TrainingDataPreparer:
         print("  - ../data/feature_stds.npy")
         
         # Verify normalization
-        X_normalized_array = np.array(X_normalized)
-        X_normalized_flat = X_normalized_array.reshape(-1, X_normalized_array.shape[-1])
+        X_normalized_flat = X_normalized.reshape(-1, X_normalized.shape[-1])
         
         print(f"After normalization:")
         print(f"  Mean: {X_normalized_flat.mean():.6f} (should be ~0)")
         print(f"  Std: {X_normalized_flat.std():.6f} (should be ~1)")
         print(f"  Range: {X_normalized_flat.min():.6f} to {X_normalized_flat.max():.6f}")
         
-        return X_normalized
+        return X_normalized.tolist()
 
     def prepare_from_extracted_frames(self, frames_root_dir, output_file):
         X, y, labels = [], [], []
@@ -149,10 +173,10 @@ class TrainingDataPreparer:
             if len(frame_paths) < 10:
                 continue
 
-            # Extract pose sequence
+            # Extract pose sequence WITHOUT normalization during data preparation
             try:
                 pose_sequence = self.extractor.extract_pose_from_video_frames(
-                    frame_paths
+                    frame_paths, apply_normalization=False  # KEY: Don't normalize during extraction
                 )
                 if len(pose_sequence) > 0:
                     # Improved label extraction: use folder name before first underscore
@@ -162,14 +186,12 @@ class TrainingDataPreparer:
                     y.append(label)
                     labels.append(label)
                     label_counts[label] = label_counts.get(label, 0) + 1
-                    print(
-                        f"Processed {video_dir}: {len(pose_sequence)} frames -> {label}"
-                    )
+                    print(f"Processed {video_dir}: {len(pose_sequence)} frames -> {label}")
             except Exception as e:
                 print(f"Error processing {video_dir}: {e}")
                 continue
 
-        # *** APPLY NORMALIZATION HERE ***
+        # Apply normalization here
         print(f"\nApplying normalization to {len(X)} sequences...")
         X_normalized = self.normalize_features(X)
 
@@ -196,7 +218,6 @@ class TrainingDataPreparer:
 
         return training_data
 
-
 def main():
     preparer = TrainingDataPreparer()
     frames_dir = "/media/sayad/Ubuntu-Data/SilentVoice_BD/uploads/frames"
@@ -207,7 +228,6 @@ def main():
     else:
         print(f"Frames directory not found: {frames_dir}")
         print("Please update the frames_dir path in the script")
-
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+import cv2
+import numpy as np
+import mediapipe as mp
+import json
+import sys
+import os
+import gc
+from typing import List
+
+class OptimizedMediaPipePoseExtractor:
+    def __init__(self, skip_normalization_loading=False):
+        self.mp_holistic = mp.solutions.holistic
+        self.holistic = self.mp_holistic.Holistic(
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+            model_complexity=0
+        )
+        self.feature_means = None
+        self.feature_stds  = None
+        if not skip_normalization_loading:
+            self.load_normalization_params()
+
+    def load_normalization_params(self):
+        try:
+            means_path = '../data/feature_means.npy'
+            stds_path  = '../data/feature_stds.npy'
+            if os.path.exists(means_path) and os.path.exists(stds_path):
+                self.feature_means = np.load(means_path)
+                self.feature_stds  = np.load(stds_path)
+                print("✅ Loaded normalization params from numpy files", file=sys.stderr)
+                return
+            json_path = '../data/normalization_params.json'
+            if os.path.exists(json_path):
+                with open(json_path, 'r') as f:
+                    params = json.load(f)
+                self.feature_means = np.array(params['feature_means'])
+                self.feature_stds  = np.array(params['feature_stds'])
+                print("✅ Loaded normalization params from JSON file", file=sys.stderr)
+                return
+            print("⚠️ No normalization parameters found. Using raw features.", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ Error loading normalization params: {e}", file=sys.stderr)
+
+    def normalize_sequence(self, sequence, apply_normalization=True):
+        if not apply_normalization or self.feature_means is None or self.feature_stds is None:
+            return sequence
+        seq = np.array(sequence)
+        return ((seq - self.feature_means) / self.feature_stds).tolist()
+
+    def extract_keypoints(self, results) -> np.ndarray:
+        try:
+            lh = (np.array([[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark]).flatten()
+                  if results.left_hand_landmarks else np.zeros(21*3))
+            rh = (np.array([[lm.x, lm.y, lm.z] for lm in results.right_hand_landmarks.landmark]).flatten()
+                  if results.right_hand_landmarks else np.zeros(21*3))
+            pose = (np.array([[lm.x, lm.y, lm.z, lm.visibility] for lm in results.pose_landmarks.landmark]).flatten()
+                    if results.pose_landmarks else np.zeros(33*4))
+            face = (np.array([[lm.x, lm.y, lm.z] for lm in results.face_landmarks.landmark[:10]]).flatten()
+                    if results.face_landmarks else np.zeros(10*3))
+            features = np.concatenate([lh, rh, pose, face])
+            return features
+        except Exception as e:
+            print(f"Error extracting keypoints: {e}", file=sys.stderr)
+            return np.zeros(288)
+
+    def extract_pose_from_video_file(self, video_path: str, max_frames: int = 30,
+                                     apply_normalization: bool = True) -> List[List[float]]:
+        cap = cv2.VideoCapture(video_path)
+        seq = []
+        count = 0
+        try:
+            while cap.isOpened() and count < max_frames:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                h, w = frame.shape[:2]
+                if w > 640:
+                    scale = 640.0 / w
+                    frame = cv2.resize(frame, (int(w*scale), int(h*scale)))
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img.flags.writeable = False
+                results = self.holistic.process(img)
+                kp = self.extract_keypoints(results)
+                seq.append(kp.tolist())
+                count += 1
+        except Exception as e:
+            print(f"Error processing video: {e}", file=sys.stderr)
+        finally:
+            cap.release()
+            gc.collect()
+        return self.normalize_sequence(seq, apply_normalization)
+
+# Wrapper for external calls
+def extract_pose_landmarks(video_path, max_frames=30):
+    extractor = OptimizedMediaPipePoseExtractor()
+    return np.array(extractor.extract_pose_from_video_file(video_path, max_frames, apply_normalization=True))
+
+if __name__ == "__main__":
+    import sys, json
+    if len(sys.argv) < 3:
+        print(json.dumps({"error":"Usage: python pose_extractor.py video <path>"}))
+    else:
+        _, mode, path = sys.argv
+        seq = extract_pose_landmarks(path) if mode=='video' else []
+        print(json.dumps({"sequence": seq.tolist()}))
+

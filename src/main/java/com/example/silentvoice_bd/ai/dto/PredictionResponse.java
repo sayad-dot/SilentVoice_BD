@@ -31,6 +31,13 @@ public class PredictionResponse {
     @JsonProperty("processing_info")
     private Map<String, Object> processingInfo;
 
+    // Additional fields for debugging normalization issues
+    @JsonProperty("normalization_applied")
+    private Boolean normalizationApplied;
+
+    @JsonProperty("data_statistics")
+    private Map<String, Object> dataStatistics;
+
     // Constructors
     public PredictionResponse() {
     }
@@ -55,6 +62,22 @@ public class PredictionResponse {
     public static PredictionResponse success(String predictedText, double confidence,
             Integer processingTimeMs, UUID predictionId) {
         return new PredictionResponse(predictedText, confidence, processingTimeMs, predictionId);
+    }
+
+    // Helper methods for debugging
+    public boolean isHighConfidence() {
+        return confidence > 0.7;
+    }
+
+    public boolean isLowConfidence() {
+        return confidence < 0.1;
+    }
+
+    public String getConfidenceLevel() {
+        if (confidence > 0.8) return "HIGH";
+        if (confidence > 0.5) return "MEDIUM";
+        if (confidence > 0.2) return "LOW";
+        return "VERY_LOW";
     }
 
     // Getters and setters
@@ -128,5 +151,33 @@ public class PredictionResponse {
 
     public void setProcessingInfo(Map<String, Object> processingInfo) {
         this.processingInfo = processingInfo;
+    }
+
+    public Boolean getNormalizationApplied() {
+        return normalizationApplied;
+    }
+
+    public void setNormalizationApplied(Boolean normalizationApplied) {
+        this.normalizationApplied = normalizationApplied;
+    }
+
+    public Map<String, Object> getDataStatistics() {
+        return dataStatistics;
+    }
+
+    public void setDataStatistics(Map<String, Object> dataStatistics) {
+        this.dataStatistics = dataStatistics;
+    }
+
+    @Override
+    public String toString() {
+        return "PredictionResponse{" +
+                "success=" + success +
+                ", predictedText='" + predictedText + '\'' +
+                ", confidence=" + confidence +
+                ", processingTimeMs=" + processingTimeMs +
+                ", modelVersion='" + modelVersion + '\'' +
+                ", error='" + error + '\'' +
+                '}';
     }
 }
