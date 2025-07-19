@@ -37,19 +37,44 @@ out/
 .settings/
 *.sublime-*
 *.swp
-
-# Python
+*.swo
+*~
+i-env-py311/
+# Python Virtual Environments
 ai-env/
 .venv/
 venv/
 env/
+ENV/
+.env/
+.Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Data, Models, and Large Files
+# AI Models and Training Data
 uploads/frames/
 uploads/thumbnails/
 uploads/videos/
@@ -58,23 +83,187 @@ datasets/
 data/
 python-ai/data/
 python-ai/trained_models/
+python-ai/trained_models_backup/
 python-ai/__pycache__/
 python-ai/scripts/__pycache__/
+python-ai/scripts/models/__pycache__/
+python-ai/models/__pycache__/
 *.h5
 *.onnx
 *.pkl
+*.pickle
+*.joblib
 *.pb
 *.keras
+*.model
+*.weights
+*.npy
+*.npz
 
-# Jupyter
-.ipynb_checkpoints/
+# NEW: Hyperparameter Optimization Results
+python-ai/trained_models/best_hyperparameters.json
+python-ai/trained_models/best_attention_hyperparameters.json
+python-ai/trained_models/hypertuned_*.h5
+python-ai/trained_models/attention_*.h5
+python-ai/trained_models/hypertuned_*.pkl
+python-ai/trained_models/attention_*.pkl
+python-ai/trained_models/*_config.json
+python-ai/trained_models/*_encoder.pkl
+python-ai/trained_models/*_model_config.json
 
-# Logs
-logs/
+# NEW: Optuna Study Database and Optimization Files
+*.db
+study.db
+optuna_study.db
+optuna_studies/
+hyperparameter_studies/
+optimization_results/
+
+# NEW: TensorFlow and ML Framework Cache
+.tensorflow/
+.keras/
+mlruns/
+runs/
+wandb/
 tensorboard_logs/
+logs/
 
-# OS/Temp
+# NEW: Enhanced Processing Output
+pose_out.json
+temp/
+extracted_frames/
+processing_temp/
+frame_cache/
+pose_cache/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# NEW: Configuration Files with Sensitive Data
+.env
+.env.local
+.env.production
+.env.development
+config.json
+secrets.json
+credentials.json
+application-dev.properties
+application-prod.properties
+application-local.properties
+
+# NEW: Large Dataset and Media Files
+*.csv
+*.tsv
+*.json
+*.parquet
+*.feather
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.flv
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# NEW: Backup and Archive Files
+*.backup
+*.bak
+*.old
+*.orig
+*.save
+
+# NEW: System and Runtime Files
+.fuse_hidden*
+.nfs*
+*.pid
+*.seed
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# NEW: React Frontend (if applicable)
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# OS/Temp (Enhanced)
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
 ehthumbs.db
 $RECYCLE.BIN/
+Desktop.ini
+
+# NEW: Docker and Container Files
+.dockerignore
+docker-compose.override.yml
+Dockerfile.local
+*.dockerignore
+
+# NEW: Testing and Coverage
+.coverage
+.pytest_cache/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+
+# NEW: Temporary Processing Files
+*.tmp
+*.temp
+temp_*
+processing_*
+batch_*
+# Project-specific additions
+backend_startup_logs.txt
+pose_out.json
+SilentVoice_BD.iml
+HELP.md
+
+# Build and runtime
+target/
+temp/
+uploads/
+
+# Python environment and cache
+ai-env/
+python-ai/__pycache__/
+python-ai/scripts/__pycache__/
+python-ai/models/__pycache__/
+
+# AI models and data
+python-ai/data/
+python-ai/trained_models/
+python-ai/trained_models_backup/
+dataset/
+
+# Processing outputs
+pose_out.json
+*.log
+*.tmp
