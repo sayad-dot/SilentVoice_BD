@@ -1,3 +1,38 @@
+/* Import new styles */
+@import './styles/auth.css';
+@import './styles/common.css';
+
+/* App Container Updates */
+.App.authenticated {
+  min-height: 100vh;
+  background: #f8f9fa;
+}
+
+.App.authenticated .video-upload-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+/* Update existing video upload styles to work with authenticated layout */
+.video-upload-container .upload-header {
+  margin-bottom: 32px;
+}
+
+.video-upload-container .upload-header h1 {
+  font-size: 28px;
+  color: #2d3748;
+  margin-bottom: 8px;
+}
+
+.video-upload-container .upload-header p {
+  color: #718096;
+  font-size: 16px;
+  margin: 0;
+}
+
 .App {
   text-align: center;
 }
