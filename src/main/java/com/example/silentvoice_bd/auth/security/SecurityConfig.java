@@ -1,7 +1,7 @@
 package com.example.silentvoice_bd.auth.security;
 
-import com.example.silentvoice_bd.auth.service.CustomUserDetailsService;
-import lombok.RequiredArgsConstructor;
+import java.util.Arrays;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -20,8 +20,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
-import java.util.List;
+import com.example.silentvoice_bd.auth.service.CustomUserDetailsService;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
@@ -38,35 +39,6 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf(csrf -> csrf.disable()) // Disable CSRF for REST API
-            .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Enable CORS
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                // Allow auth endpoints without authentication
-                .requestMatchers("/api/auth/**").permitAll()
-                // Allow preflight OPTIONS requests
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // Allow Swagger/OpenAPI documentation
-                .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                // All other requests require authentication
-                .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .authenticationProvider(daoAuthenticationProvider());
-
-        return http.build();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
-        AuthenticationManagerBuilder authManagerBuilder =
-            http.getSharedObject(AuthenticationManagerBuilder.class);
-        authManagerBuilder.authenticationProvider(daoAuthenticationProvider());
-        return authManagerBuilder.build();
-    }
-
-    @Bean
     public DaoAuthenticationProvider daoAuthenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
         provider.setUserDetailsService(customUserDetailsService);
@@ -75,26 +47,75 @@ public class SecurityConfig {
     }
 
     @Bean
+    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
+        AuthenticationManagerBuilder auth
+                = http.getSharedObject(AuthenticationManagerBuilder.class);
+        auth.authenticationProvider(daoAuthenticationProvider());
+        return auth.build();
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                // Disable CSRF (we're a stateless REST + WS API)
+                .csrf(csrf -> csrf.disable())
+                // Enable CORS with our configuration (see corsConfigurationSource() below)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // Do not create sessions; every request must carry a token
+                .sessionManagement(session
+                        -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                // Authorization rules
+                .authorizeHttpRequests(auth -> auth
+                // Public REST endpoints
+                .requestMatchers("/api/auth/**").permitAll()
+                // Allow all SockJS/WebSocket handshake traffic
+                .requestMatchers("/ws/**").permitAll()
+                // Preflight requests
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Swagger / OpenAPI
+                .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**")
+                .permitAll()
+                // Everything else requires a valid JWT
+                .anyRequest().authenticated()
+                )
+                // Plug in our JWT filter before Spring’s username/password filter
+                .addFilterBefore(jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class)
+                // And use our DAO auth provider
+                .authenticationProvider(daoAuthenticationProvider());
+
+        return http.build();
+    }
+
+    /**
+     * CORS configuration to allow the React frontend (localhost:3000) to call
+     * both HTTP REST and SockJS handshake endpoints.
+     */
+    @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
+        CorsConfiguration config = new CorsConfiguration();
 
-        // Allow specific origin
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
+        // allow your React app origin (add more if needed)
+        config.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
 
-        // Allow all HTTP methods
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        // allow all HTTP methods (GET, POST, etc)
+        config.setAllowedMethods(Arrays.asList(
+                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+        ));
 
-        // Allow all headers
-        configuration.setAllowedHeaders(Arrays.asList("*"));
+        // allow all headers (Authorization, Content-Type, etc)
+        config.setAllowedHeaders(Arrays.asList("*"));
 
-        // Allow credentials
-        configuration.setAllowCredentials(true);
+        // allow cookies / auth headers
+        config.setAllowCredentials(true);
 
-        // Set max age for preflight requests
-        configuration.setMaxAge(3600L);
+        // cache preflight response for 1 hour
+        config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        UrlBasedCorsConfigurationSource source
+                = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
         return source;
     }
 }

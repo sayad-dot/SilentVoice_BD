@@ -31,7 +31,7 @@ const VideoList = ({ refreshTrigger, onVideoSelect }) => {
   // Load videos when component mounts or dependencies change
   useEffect(() => {
     loadVideos();
-  }, [user, refreshTrigger]);
+  }, []);
 
   // Handle video deletion
   const handleDelete = async (videoId, videoName) => {
