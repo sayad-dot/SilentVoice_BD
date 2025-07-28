@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
@@ -58,27 +59,44 @@ public class LiveStreamController {
     }
 
     @MessageMapping("/live-frame")
-    public void processLiveFrame(Map<String, Object> frameData) {
+    public void processLiveFrame(Map<String, Object> frameData, SimpMessageHeaderAccessor headerAccessor) {
         try {
-            String sessionId = (String) frameData.get("sessionId");
+            String aiSessionId = (String) frameData.get("sessionId");
             String frameDataBase64 = (String) frameData.get("frameData");
             Long timestamp = (Long) frameData.get("timestamp");
 
-            logger.debug("📹 Processing frame for session: {} at timestamp: {}", sessionId, timestamp);
+            // Get the WebSocket session ID for proper user routing
+            String wsSessionId = headerAccessor.getSessionId();
+
+            logger.debug("📹 Processing frame for AI session: {} (WebSocket: {})", aiSessionId, wsSessionId);
 
             // Add timeout protection
             CompletableFuture<Void> processingTask = CompletableFuture.runAsync(() -> {
                 try {
-                    liveProcessingService.processFrameAsync(sessionId, frameDataBase64, timestamp,
+                    liveProcessingService.processFrameAsync(aiSessionId, frameDataBase64, timestamp,
                             (prediction) -> {
-                                logger.debug("🔮 Sending prediction to session {}: {}",
-                                        sessionId, prediction.get("prediction"));
+                                logger.debug("🔮 Sending prediction to topic for session {}: {}",
+                                        aiSessionId, prediction.get("prediction"));
 
-                                messagingTemplate.convertAndSendToUser(sessionId,
-                                        "/queue/predictions", prediction);
+                                // Send to topic using AI session ID (FIXED)
+                                messagingTemplate.convertAndSend(
+                                        "/topic/predictions." + aiSessionId,
+                                        prediction
+                                );
                             });
                 } catch (Exception e) {
-                    logger.error("❌ Frame processing error for session {}", sessionId, e);
+                    logger.error("❌ Frame processing error for AI session {}", aiSessionId, e);
+
+                    // Send error to topic (FIXED)
+                    messagingTemplate.convertAndSend(
+                            "/topic/errors." + aiSessionId,
+                            Map.of(
+                                    "error", true,
+                                    "message", "Frame processing failed: " + e.getMessage(),
+                                    "aiSessionId", aiSessionId,
+                                    "timestamp", System.currentTimeMillis()
+                            )
+                    );
                 }
             });
 
@@ -86,15 +104,15 @@ public class LiveStreamController {
             try {
                 processingTask.get(30, TimeUnit.SECONDS);
             } catch (TimeoutException e) {
-                logger.error("⏰ Frame processing timeout for session {}", sessionId);
+                logger.error("⏰ Frame processing timeout for AI session {}", aiSessionId);
                 processingTask.cancel(true);
 
-                // Send timeout error to user
-                messagingTemplate.convertAndSendToUser(sessionId,
-                        "/queue/errors",
+                // Send timeout error to topic (FIXED)
+                messagingTemplate.convertAndSend("/topic/errors." + aiSessionId,
                         Map.of(
                                 "error", true,
                                 "message", "Processing timeout - system overloaded",
+                                "aiSessionId", aiSessionId,
                                 "timestamp", System.currentTimeMillis()
                         )
                 );
@@ -102,13 +120,14 @@ public class LiveStreamController {
 
         } catch (Exception e) {
             logger.error("❌ Error processing frame", e);
-            String sessionId = (String) frameData.get("sessionId");
+            String aiSessionId = (String) frameData.get("sessionId");
 
-            messagingTemplate.convertAndSendToUser(sessionId,
-                    "/queue/errors",
+            // Send general error to topic (FIXED)
+            messagingTemplate.convertAndSend("/topic/errors." + aiSessionId,
                     Map.of(
                             "error", true,
                             "message", "Processing failed: " + e.getMessage(),
+                            "aiSessionId", aiSessionId,
                             "timestamp", System.currentTimeMillis()
                     )
             );

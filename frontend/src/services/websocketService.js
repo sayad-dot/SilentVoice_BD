@@ -25,16 +25,14 @@ class WebSocketService {
       const socket = new SockJS('/ws');
       this.stompClient = Stomp.over(() => socket);
       
-      // Increased timeouts for stability
-      this.stompClient.heartbeat.outgoing = 30000; // 30 seconds
-      this.stompClient.heartbeat.incoming = 30000; // 30 seconds
-      this.stompClient.reconnectDelay = 10000; // 10 seconds
+      this.stompClient.heartbeat.outgoing = 30000;
+      this.stompClient.heartbeat.incoming = 30000;
+      this.stompClient.reconnectDelay = 10000;
       
       this.stompClient.debug = (str) => {
         console.log('📡 STOMP:', str);
       };
       
-      // Increased connection timeout to 20 seconds
       const connectTimeout = setTimeout(() => {
         console.error('⏰ WebSocket connection timeout after 20 seconds');
         reject(new Error('Connection timeout after 20 seconds'));
@@ -68,13 +66,21 @@ class WebSocketService {
       
       this.subscriptions.forEach((subscription, key) => {
         console.log(`🔇 Unsubscribing from ${key}`);
-        subscription.unsubscribe();
+        try {
+          subscription.unsubscribe();
+        } catch (e) {
+          console.warn(`Failed to unsubscribe from ${key}:`, e);
+        }
       });
       this.subscriptions.clear();
       
-      this.stompClient.disconnect(() => {
-        console.log('✅ WebSocket disconnected successfully');
-      });
+      try {
+        this.stompClient.disconnect(() => {
+          console.log('✅ WebSocket disconnected successfully');
+        });
+      } catch (e) {
+        console.warn('Disconnect error:', e);
+      }
       
       this.connected = false;
       this.sessionId = null;
@@ -91,7 +97,6 @@ class WebSocketService {
 
       console.log('🎬 Starting live session for user:', userId);
 
-      // Increased session timeout to 20 seconds
       const sessionTimeout = setTimeout(() => {
         reject(new Error('Session start timeout after 20 seconds'));
       }, 20000);
@@ -132,6 +137,7 @@ class WebSocketService {
     });
   }
 
+  // UPDATED: Subscribe to topic-specific predictions instead of user queue
   subscribeToPredictions(callback) {
     if (!this.connected || !this.sessionId) {
       throw new Error('Session not started');
@@ -139,8 +145,10 @@ class WebSocketService {
 
     console.log('🎯 Subscribing to predictions for session:', this.sessionId);
 
-    const subscription = this.stompClient.subscribe('/user/queue/predictions', (message) => {
+    // Subscribe to topic specific to this AI session (FIXED)
+    const subscription = this.stompClient.subscribe(`/topic/predictions.${this.sessionId}`, (message) => {
       try {
+        console.log('📨 Raw prediction message received:', message);
         const prediction = JSON.parse(message.body);
         console.log('🔮 Prediction received:', prediction);
         callback(prediction);
@@ -153,6 +161,7 @@ class WebSocketService {
     return subscription;
   }
 
+  // UPDATED: Subscribe to topic-specific errors instead of user queue
   subscribeToErrors(callback) {
     if (!this.connected || !this.sessionId) {
       throw new Error('Session not started');
@@ -160,7 +169,8 @@ class WebSocketService {
 
     console.log('⚠️ Subscribing to errors for session:', this.sessionId);
 
-    const subscription = this.stompClient.subscribe('/user/queue/errors', (message) => {
+    // Subscribe to error topic specific to this AI session (FIXED)
+    const subscription = this.stompClient.subscribe(`/topic/errors.${this.sessionId}`, (message) => {
       try {
         const error = JSON.parse(message.body);
         console.error('🚨 Error received:', error);

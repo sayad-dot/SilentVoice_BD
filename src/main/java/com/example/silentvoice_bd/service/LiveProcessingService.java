@@ -194,6 +194,7 @@ public class LiveProcessingService {
         return sequencePath;
     }
 
+    // Updated method with improved error handling and JSON validation
     private Map<String, Object> callPythonSequenceProcessor(String sequencePath, String sessionId) throws Exception {
         CommandLine cmdLine = new CommandLine(pythonVenv);
         cmdLine.addArgument(scriptsPath + "live_sequence_processor.py");
@@ -217,13 +218,29 @@ public class LiveProcessingService {
         try {
             int exitValue = executor.execute(cmdLine);
 
+            String output = outputStream.toString().trim();
+            String errorOutput = errorStream.toString();
+
+            // Log Python stderr output (contains debug info)
+            if (!errorOutput.isEmpty()) {
+                logger.debug("🐍 Python stderr: {}", errorOutput);
+            }
+
             if (exitValue == 0) {
-                String output = outputStream.toString();
-                logger.debug("🐍 Python output: {}", output);
+                logger.debug("🐍 Python JSON output: {}", output);
+
+                // Validate that output is valid JSON
+                if (output.isEmpty()) {
+                    throw new RuntimeException("Python script produced no output");
+                }
+
+                if (!output.startsWith("{") && !output.startsWith("[")) {
+                    throw new RuntimeException("Python script output is not valid JSON: " + output.substring(0, Math.min(100, output.length())));
+                }
+
                 return objectMapper.readValue(output, Map.class);
             } else {
-                String errorOutput = errorStream.toString();
-                logger.error("🐍 Python script error: {}", errorOutput);
+                logger.error("🐍 Python script error (exit {}): {}", exitValue, errorOutput);
                 throw new RuntimeException("Python script execution failed: " + errorOutput);
             }
         } catch (ExecuteException e) {

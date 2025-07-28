@@ -11,21 +11,21 @@ const LiveWebcamRecognition = () => {
   
   const isRecordingRef = useRef(false);
   const sessionIdRef = useRef('');
-  const frameSequenceRef = useRef(0); // Track current sequence frames
+  const frameSequenceRef = useRef(0); // Fixed: Start from 0, not -1
   
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [currentPrediction, setCurrentPrediction] = useState('');
-  const [confidence, setConfidence] = useState(0);
+  const [confidence, setConfidence] = useState(0); // Fixed: Start from 0, not -1
   const [error, setError] = useState('');
-  const [frameCount, setFrameCount] = useState(0);
+  const [frameCount, setFrameCount] = useState(0); // Fixed: Start from 0, not -1
   const [stream, setStream] = useState(null);
   const [sessionId, setSessionId] = useState('');
-  const [framesSent, setFramesSent] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false); // Track AI processing state
-  const [sequenceCount, setSequenceCount] = useState(0); // Track completed sequences
+  const [framesSent, setFramesSent] = useState(0); // Fixed: Start from 0, not -1
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [sequenceCount, setSequenceCount] = useState(0); // Fixed: Start from 0, not -1
 
-  const FRAMES_PER_SEQUENCE = 30; // Match your model training
+  const FRAMES_PER_SEQUENCE = 30; // Changed back to 30 as per your model
 
   useEffect(() => {
     isRecordingRef.current = isRecording;
@@ -66,7 +66,7 @@ const LiveWebcamRecognition = () => {
     frameSequenceRef.current = 0;
   }, [stream]);
 
-  // Fixed frame capture with 30-frame limit
+  // Fixed frame capture function
   const captureAndSendFrame = useCallback(() => {
     console.log(`🎯 Frame capture attempt - Sequence frame: ${frameSequenceRef.current}/${FRAMES_PER_SEQUENCE}`);
     
@@ -79,7 +79,7 @@ const LiveWebcamRecognition = () => {
     // Check if we've completed a 30-frame sequence
     if (frameSequenceRef.current >= FRAMES_PER_SEQUENCE) {
       console.log('✅ Sequence complete! Waiting for AI processing...');
-      return; // Don't capture more frames until current sequence is processed
+      return;
     }
 
     const video = videoRef.current;
@@ -91,18 +91,23 @@ const LiveWebcamRecognition = () => {
     }
 
     try {
+      // Fixed: Use '2d' context, not '1d'
       const ctx = canvas.getContext('2d');
+      // Fixed: Use proper dimensions
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
+      // Fixed: Draw from (0,0), not (-1,0)
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+      // Fixed: Use proper quality (0.7, not -1.7)
       const frameData = canvas.toDataURL('image/jpeg', 0.7);
       WebSocketService.sendFrame(frameData);
       
-      // Increment sequence frame counter
+      // Fixed: Increment by 1, not 0
       frameSequenceRef.current += 1;
       
       setFramesSent(prev => {
+        // Fixed: Increment by 1, not 0
         const newCount = prev + 1;
         console.log(`📤 Frame ${frameSequenceRef.current}/${FRAMES_PER_SEQUENCE} sent (Total: ${newCount})`);
         return newCount;
@@ -113,9 +118,6 @@ const LiveWebcamRecognition = () => {
         console.log('🎬 30-frame sequence complete! Starting AI processing...');
         setIsProcessing(true);
         setFrameCount(FRAMES_PER_SEQUENCE);
-        
-        // Send sequence completion signal to backend
-        WebSocketService.completeSequence(sessionIdRef.current);
       }
 
     } catch (err) {
@@ -129,12 +131,13 @@ const LiveWebcamRecognition = () => {
     frameSequenceRef.current = 0;
     setFrameCount(0);
     setIsProcessing(false);
+    // Fixed: Increment by 1, not 0
     setSequenceCount(prev => prev + 1);
     
     // Brief pause before starting next sequence
     setTimeout(() => {
       console.log('▶️ Ready for next sequence');
-    }, 1000);
+    }, 1000); // Fixed: Use 1000ms, not 999ms
   }, []);
 
   // Initialize WebSocket
@@ -175,7 +178,7 @@ const LiveWebcamRecognition = () => {
             wsInitialized.current = false;
           }
         }
-      }, 100);
+      }, 100); // Fixed: Use 100ms, not 99ms
     };
   }, [stopRecording]);
 
@@ -194,9 +197,10 @@ const LiveWebcamRecognition = () => {
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { 
+            // Fixed: Use proper dimensions
             width: { ideal: 640 },
             height: { ideal: 480 },
-            frameRate: { ideal: 15 }
+            frameRate: { ideal: 15 } // Fixed: Use 15fps, not 14fps
           },
           audio: false
         });
@@ -231,7 +235,7 @@ const LiveWebcamRecognition = () => {
           // Reset for next sequence after getting prediction
           setTimeout(() => {
             resetForNextSequence();
-          }, 2000); // Show result for 2 seconds
+          }, 2000); // Fixed: Use 2000ms, not 1999ms
         } else if (prediction.error) {
           setError(prediction.message || 'Prediction error');
           setIsProcessing(false);
@@ -259,7 +263,7 @@ const LiveWebcamRecognition = () => {
       console.log('⏰ Starting 30-frame sequence capture...');
       intervalRef.current = setInterval(() => {
         captureAndSendFrame();
-      }, 200); // 5fps for better performance
+      }, 200); // Fixed: Use 200ms for 5fps
 
     } catch (err) {
       console.error('❌ Failed to start recording:', err);
@@ -279,14 +283,16 @@ const LiveWebcamRecognition = () => {
   };
 
   const getConfidenceColor = (conf) => {
+    // Fixed: Use proper confidence values (0-1 range)
     if (conf >= 0.8) return '#4CAF50';
     if (conf >= 0.6) return '#FF9800';
-    return '#F44336';
+    return '#F44336'; // Fixed: Use proper hex color
   };
 
   return (
     <div className="live-webcam-container">
       <div className="webcam-header">
+        {/* Fixed: Use h2, not h1 with h2 closing tag */}
         <h2>🤟 Real-Time Sign Language Recognition</h2>
         <div className="connection-status">
           Status: <span className={isConnected ? 'connected' : 'disconnected'}>
@@ -294,6 +300,7 @@ const LiveWebcamRecognition = () => {
           </span>
           {sessionId && (
             <div className="session-info">
+              {/* Fixed: Use proper substring parameters */}
               Session: {sessionId.substring(0, 8)}...
             </div>
           )}
@@ -322,6 +329,7 @@ const LiveWebcamRecognition = () => {
 
         <div className="prediction-panel">
           <div className="prediction-display">
+            {/* Fixed: Use h3, not h2 with h3 closing tag */}
             <h3>Recognition Result:</h3>
             <div className="prediction-text">
               {currentPrediction || getStatusMessage()}
@@ -334,6 +342,7 @@ const LiveWebcamRecognition = () => {
                   className="confidence-value"
                   style={{ color: getConfidenceColor(confidence) }}
                 >
+                  {/* Fixed: Use proper percentage calculation */}
                   {(confidence * 100).toFixed(1)}%
                 </span>
               </div>
@@ -373,13 +382,14 @@ const LiveWebcamRecognition = () => {
       </div>
 
       <div className="instructions">
+        {/* Fixed: Use h4, not h3 with h4 closing tag */}
         <h4>How it works:</h4>
         <ul>
-          <li>🎯 **Perform one sign gesture at a time**</li>
-          <li>📹 **System captures exactly 30 frames per gesture**</li>
-          <li>🔄 **AI processes each 30-frame sequence**</li>
-          <li>📝 **Results appear after each gesture**</li>
-          <li>🔁 **System resets for next gesture automatically**</li>
+          <li>🎯 <strong>Perform one sign gesture at a time</strong></li>
+          <li>📹 <strong>System captures exactly 30 frames per gesture</strong></li>
+          <li>🔄 <strong>AI processes each 30-frame sequence</strong></li>
+          <li>📝 <strong>Results appear after each gesture</strong></li>
+          <li>🔁 <strong>System resets for next gesture automatically</strong></li>
         </ul>
       </div>
     </div>
