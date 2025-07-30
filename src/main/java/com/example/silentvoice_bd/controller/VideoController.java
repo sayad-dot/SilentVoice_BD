@@ -9,13 +9,11 @@ import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
 import com.example.silentvoice_bd.ai.services.AIProcessingService;
 import com.example.silentvoice_bd.dto.VideoUploadResponse;
 import com.example.silentvoice_bd.model.VideoFile;
@@ -33,7 +32,6 @@ import com.example.silentvoice_bd.service.VideoService;
 
 @RestController
 @RequestMapping("/api/videos")
-@CrossOrigin(origins = "http://localhost:3000")
 public class VideoController {
 
     private static final Logger logger = LoggerFactory.getLogger(VideoController.class);
@@ -59,7 +57,7 @@ public class VideoController {
             @RequestParam(value = "enableAI", defaultValue = "true") boolean enableAI
     ) {
         logger.info("🎬 Received video upload: filename={}, size={} bytes, AI enabled={}",
-                    file.getOriginalFilename(), file.getSize(), enableAI);
+                file.getOriginalFilename(), file.getSize(), enableAI);
 
         VideoFile savedVideo = videoService.storeVideoFile(file, description);
         logger.info("💾 Video saved with ID: {}, filename: {}", savedVideo.getId(), savedVideo.getFilename());
@@ -143,15 +141,15 @@ public class VideoController {
                     // Check for low confidence (normalization issue indicator)
                     if (latestPrediction.getConfidenceScore().doubleValue() < 0.1) {
                         logger.error("❌ CRITICAL: Very low confidence ({:.2f}%) for video {}",
-                                   latestPrediction.getConfidenceScore().doubleValue() * 100, id);
+                                latestPrediction.getConfidenceScore().doubleValue() * 100, id);
                         logger.error("   🔧 This suggests normalization issues in pose extraction");
                         logger.error("   📋 Predicted text: {}", latestPrediction.getPredictedText());
                     } else if (latestPrediction.getConfidenceScore().doubleValue() > 0.7) {
                         logger.info("✅ High confidence prediction ({:.2f}%) - normalization likely working",
-                                  latestPrediction.getConfidenceScore().doubleValue() * 100);
+                                latestPrediction.getConfidenceScore().doubleValue() * 100);
                     } else {
                         logger.warn("⚠️ Medium confidence ({:.2f}%) - check normalization",
-                                  latestPrediction.getConfidenceScore().doubleValue() * 100);
+                                latestPrediction.getConfidenceScore().doubleValue() * 100);
                     }
 
                     status.put("aiComplete", true);

@@ -1,18 +1,22 @@
 package com.example.silentvoice_bd.auth.controller;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.silentvoice_bd.auth.dto.AuthRequest;
 import com.example.silentvoice_bd.auth.dto.AuthResponse;
 import com.example.silentvoice_bd.auth.dto.RegisterRequest;
 import com.example.silentvoice_bd.auth.service.AuthService;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:3000")
 @RequiredArgsConstructor
 public class AuthController {
 

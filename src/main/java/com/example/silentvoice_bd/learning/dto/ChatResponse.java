@@ -5,11 +5,12 @@ import java.time.LocalDateTime;
 import lombok.Data;
 
 @Data
-public class ChatMessage {
+public class ChatResponse {
 
     private String content;
-    private String sender; // USER, BOT
-    private Long lessonId;
+    private String sender;
     private LocalDateTime timestamp;
-    private String contextData; // JSON string for additional context
+    private String contextData;
+    private Boolean isError = false;
+    private String errorMessage;
 }

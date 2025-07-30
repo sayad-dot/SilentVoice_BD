@@ -4,6 +4,8 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import VideoUpload from './components/VideoUpload';
 import LiveWebcamRecognition from './components/LiveWebcamRecognition';
+import LessonHome from './components/learning/LessonHome';
+import LessonViewer from './components/learning/LessonViewer';
 import Header from './components/common/Header';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import './App.css';
@@ -11,7 +13,8 @@ import './App.css';
 const AppContent = () => {
   const { user, loading } = useAuth();
   const [authView, setAuthView] = useState('login'); // 'login' or 'register'
-  const [currentView, setCurrentView] = useState('upload'); // 'upload' or 'live'
+  const [currentView, setCurrentView] = useState('upload'); // 'upload', 'live', 'learning'
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
 
   if (loading) {
     return (
@@ -39,6 +42,17 @@ const AppContent = () => {
     );
   }
 
+  // Handle lesson viewer navigation
+  const handleSelectLesson = (lessonId) => {
+    setSelectedLessonId(lessonId);
+    setCurrentView('lesson-viewer');
+  };
+
+  const handleBackToLessons = () => {
+    setSelectedLessonId(null);
+    setCurrentView('learning');
+  };
+
   // User is authenticated, show main application
   return (
     <div className="App authenticated">
@@ -58,13 +72,25 @@ const AppContent = () => {
         >
           📹 Live Recognition
         </button>
+        <button 
+          className={`nav-button ${currentView === 'learning' || currentView === 'lesson-viewer' ? 'active' : ''}`}
+          onClick={() => setCurrentView('learning')}
+        >
+          🎓 Learn Signs
+        </button>
       </div>
 
       <main className="app-main">
-        {currentView === 'upload' ? (
-          <VideoUpload />
-        ) : (
-          <LiveWebcamRecognition />
+        {currentView === 'upload' && <VideoUpload />}
+        {currentView === 'live' && <LiveWebcamRecognition />}
+        {currentView === 'learning' && (
+          <LessonHome onSelectLesson={handleSelectLesson} />
+        )}
+        {currentView === 'lesson-viewer' && selectedLessonId && (
+          <LessonViewer 
+            lessonId={selectedLessonId} 
+            onBack={handleBackToLessons}
+          />
         )}
       </main>
     </div>

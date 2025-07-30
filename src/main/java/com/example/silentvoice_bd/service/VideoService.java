@@ -1,7 +1,5 @@
 package com.example.silentvoice_bd.service;
 
-
-
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -10,7 +8,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.tika.Tika;
 import org.springframework.core.io.Resource;
@@ -36,9 +36,12 @@ public class VideoService {
     private final Tika tika = new Tika();
     private Path fileStorageLocation;
 
-   
-    public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties, 
-                        VideoProcessingService videoProcessingService) {
+    // BdSLW-60 dataset configuration
+    private final String DATASET_PATH = "dataset/bdslw60/archive";
+    private final Random random = new Random();
+
+    public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties,
+            VideoProcessingService videoProcessingService) {
         this.videoRepository = videoRepository;
         this.fileStorageProperties = fileStorageProperties;
         this.videoProcessingService = videoProcessingService;
@@ -55,6 +58,7 @@ public class VideoService {
         }
     }
 
+    // ========== EXISTING METHODS (Video Upload/Management) ==========
     public VideoFile storeVideoFile(MultipartFile file, String description) {
         // Validate file
         validateVideoFile(file);
@@ -62,7 +66,7 @@ public class VideoService {
         // Generate unique filename
         String originalFilenameRaw = file.getOriginalFilename();
         String originalFilename = StringUtils.cleanPath(
-            originalFilenameRaw != null ? originalFilenameRaw : "unknown"
+                originalFilenameRaw != null ? originalFilenameRaw : "unknown"
         );
         String fileExtension = getFileExtension(originalFilename);
         String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
@@ -74,11 +78,11 @@ public class VideoService {
 
             // Create and save video file entity
             VideoFile videoFile = new VideoFile(
-                uniqueFilename,
-                originalFilename,
-                file.getContentType(),
-                file.getSize(),
-                targetLocation.toString()
+                    uniqueFilename,
+                    originalFilename,
+                    file.getContentType(),
+                    file.getSize(),
+                    targetLocation.toString()
             );
             videoFile.setDescription(description);
 
@@ -134,6 +138,95 @@ public class VideoService {
         }
     }
 
+    // ========== NEW METHODS (BdSLW-60 Dataset Integration) ==========
+    /**
+     * Get a random video file for a specific sign from BdSLW-60 dataset
+     */
+    public String getRandomVideoForSign(String signName) {
+        try {
+            Path signPath = Paths.get(DATASET_PATH).resolve(signName);
+            if (Files.exists(signPath)) {
+                List<String> videos = Files.list(signPath)
+                        .filter(path -> path.toString().toLowerCase().endsWith(".mp4"))
+                        .map(path -> path.getFileName().toString())
+                        .collect(Collectors.toList());
+
+                if (!videos.isEmpty()) {
+                    return videos.get(random.nextInt(videos.size()));
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error accessing videos for sign: " + signName);
+        }
+        return null;
+    }
+
+    /**
+     * Get all video files for a specific sign from BdSLW-60 dataset
+     */
+    public List<String> getAllVideosForSign(String signName) {
+        try {
+            Path signPath = Paths.get(DATASET_PATH).resolve(signName);
+            if (Files.exists(signPath)) {
+                return Files.list(signPath)
+                        .filter(path -> path.toString().toLowerCase().endsWith(".mp4"))
+                        .map(path -> path.getFileName().toString())
+                        .collect(Collectors.toList());
+            }
+        } catch (IOException e) {
+            System.err.println("Error accessing videos for sign: " + signName);
+        }
+        return List.of();
+    }
+
+    /**
+     * Get all available signs from BdSLW-60 dataset
+     */
+    public List<String> getAvailableSigns() {
+        try {
+            Path archivePath = Paths.get(DATASET_PATH);
+            if (Files.exists(archivePath)) {
+                return Files.list(archivePath)
+                        .filter(Files::isDirectory)
+                        .map(path -> path.getFileName().toString())
+                        .collect(Collectors.toList());
+            }
+        } catch (IOException e) {
+            System.err.println("Error accessing dataset signs");
+        }
+        return List.of();
+    }
+
+    /**
+     * Load dataset video as resource for streaming
+     */
+    public Resource loadDatasetVideoAsResource(String signName, String fileName) {
+        try {
+            Path videoPath = Paths.get(DATASET_PATH)
+                    .resolve(signName)
+                    .resolve(fileName);
+
+            Resource resource = new UrlResource(videoPath.toUri());
+
+            if (resource.exists() && resource.isReadable()) {
+                return resource;
+            } else {
+                throw new FileUploadException("Dataset video not found: " + signName + "/" + fileName);
+            }
+        } catch (MalformedURLException ex) {
+            throw new FileUploadException("Dataset video not found: " + signName + "/" + fileName, ex);
+        }
+    }
+
+    /**
+     * Check if BdSLW-60 dataset is available
+     */
+    public boolean isDatasetAvailable() {
+        Path archivePath = Paths.get(DATASET_PATH);
+        return Files.exists(archivePath) && Files.isDirectory(archivePath);
+    }
+
+    // ========== PRIVATE HELPER METHODS ==========
     private void validateVideoFile(MultipartFile file) {
         if (file.isEmpty()) {
             throw new FileUploadException("Cannot upload empty file");

@@ -1,0 +1,193 @@
+/* frontend/src/styles/learning/mirror.css */
+.mirror-practice {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.mirror-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.mirror-header h3 {
+    color: #2c3e50;
+    margin: 0;
+}
+
+.mirror-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-danger {
+    background: #e74c3c;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-danger:hover {
+    background: #c0392b;
+}
+
+.mirror-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.video-container {
+    position: relative;
+    background: #2c3e50;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mirror-canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.mirror-video {
+    width: 100%;
+    height: auto;
+}
+
+.mirror-instructions {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.mirror-instructions h4 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+}
+
+.mirror-instructions ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.mirror-instructions li {
+    padding: 8px 0;
+    border-bottom: 1px solid #e9ecef;
+    color: #5a6c7d;
+    position: relative;
+    padding-left: 25px;
+}
+
+.mirror-instructions li:before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.mirror-instructions li:last-child {
+    border-bottom: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .mirror-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .mirror-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .mirror-controls {
+        justify-content: center;
+    }
+}
+
+/* Loading and error states */
+.mirror-loading {
+    text-align: center;
+    padding: 40px;
+    color: #7f8c8d;
+}
+
+.mirror-error {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    border-radius: 8px;
+    padding: 20px;
+    color: #c53030;
+    text-align: center;
+}
+
+/* Confidence indicator styles */
+.confidence-indicator {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 10;
+}
+
+.confidence-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.confidence-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 3px;
+}
+
+.confidence-text {
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    margin-top: 5px;
+}
+
+/* Pose landmark styles */
+.pose-landmarks {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.landmark-point {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #00ff00;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+}
+
+.landmark-connection {
+    position: absolute;
+    background: #00ff00;
+    height: 2px;
+    transform-origin: left center;
+    box-shadow: 0 0 2px rgba(0, 255, 0, 0.3);
+}

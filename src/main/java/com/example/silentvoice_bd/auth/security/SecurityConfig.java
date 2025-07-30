@@ -69,6 +69,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                 // Public REST endpoints
                 .requestMatchers("/api/auth/**").permitAll()
+                // Allow media endpoints for BdSLW-60 videos
+                .requestMatchers("/api/media/**").permitAll()
+                // Learning endpoints require authentication (covers /chat and /feedback)
+                .requestMatchers("/api/learning/**").authenticated()
                 // Allow all SockJS/WebSocket handshake traffic
                 .requestMatchers("/ws/**").permitAll()
                 // Preflight requests
@@ -79,7 +83,7 @@ public class SecurityConfig {
                 // Everything else requires a valid JWT
                 .anyRequest().authenticated()
                 )
-                // Plug in our JWT filter before Spring’s username/password filter
+                // Plug in our JWT filter before Spring's username/password filter
                 .addFilterBefore(jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class)
                 // And use our DAO auth provider
@@ -96,25 +100,24 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // allow your React app origin (add more if needed)
+        // Use specific origins with credentials (recommended approach)
         config.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
 
-        // allow all HTTP methods (GET, POST, etc)
+        // Allow all HTTP methods (GET, POST, etc)
         config.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
 
-        // allow all headers (Authorization, Content-Type, etc)
+        // Allow all headers (Authorization, Content-Type, etc)
         config.setAllowedHeaders(Arrays.asList("*"));
 
-        // allow cookies / auth headers
+        // Allow cookies / auth headers (needed for JWT tokens)
         config.setAllowCredentials(true);
 
-        // cache preflight response for 1 hour
+        // Cache preflight response for 1 hour
         config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source
-                = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }

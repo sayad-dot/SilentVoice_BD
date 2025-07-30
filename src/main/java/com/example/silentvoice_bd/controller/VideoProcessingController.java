@@ -1,5 +1,24 @@
 package com.example.silentvoice_bd.controller;
 
+import java.io.File;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.example.silentvoice_bd.dto.ProcessingJobResponse;
 import com.example.silentvoice_bd.model.ExtractedFrame;
 import com.example.silentvoice_bd.model.VideoMetadata;
@@ -7,23 +26,9 @@ import com.example.silentvoice_bd.model.VideoProcessingJob;
 import com.example.silentvoice_bd.processing.FrameExtractionService;
 import com.example.silentvoice_bd.processing.VideoMetadataService;
 import com.example.silentvoice_bd.processing.VideoProcessingService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.io.File;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/video-processing")
-@CrossOrigin(origins = "http://localhost:3000")
 public class VideoProcessingController {
 
     @Autowired
@@ -56,8 +61,8 @@ public class VideoProcessingController {
     public ResponseEntity<List<ProcessingJobResponse>> getProcessingStatus(@PathVariable UUID videoId) {
         List<VideoProcessingJob> jobs = videoProcessingService.getJobsByVideoId(videoId);
         List<ProcessingJobResponse> responses = jobs.stream()
-            .map(ProcessingJobResponse::new)
-            .collect(Collectors.toList());
+                .map(ProcessingJobResponse::new)
+                .collect(Collectors.toList());
 
         return ResponseEntity.ok(responses);
     }
@@ -107,9 +112,9 @@ public class VideoProcessingController {
                 Resource resource = new FileSystemResource(thumbnailFile);
 
                 return ResponseEntity.ok()
-                    .contentType(MediaType.IMAGE_JPEG)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"thumbnail.jpg\"")
-                    .body(resource);
+                        .contentType(MediaType.IMAGE_JPEG)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"thumbnail.jpg\"")
+                        .body(resource);
             }
         }
 
@@ -137,8 +142,8 @@ public class VideoProcessingController {
     public ResponseEntity<List<ProcessingJobResponse>> getPendingJobs() {
         List<VideoProcessingJob> pendingJobs = videoProcessingService.getPendingJobs();
         List<ProcessingJobResponse> responses = pendingJobs.stream()
-            .map(ProcessingJobResponse::new)
-            .collect(Collectors.toList());
+                .map(ProcessingJobResponse::new)
+                .collect(Collectors.toList());
 
         return ResponseEntity.ok(responses);
     }

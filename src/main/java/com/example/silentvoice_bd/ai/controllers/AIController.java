@@ -1,27 +1,34 @@
 package com.example.silentvoice_bd.ai.controllers;
 
-import com.example.silentvoice_bd.ai.dto.AIProcessingRequest;
-import com.example.silentvoice_bd.ai.dto.PredictionResponse;
-import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
-import com.example.silentvoice_bd.ai.services.AIProcessingService;
-import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.example.silentvoice_bd.ai.dto.AIProcessingRequest;
+import com.example.silentvoice_bd.ai.dto.PredictionResponse;
+import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
+import com.example.silentvoice_bd.ai.services.AIProcessingService;
+
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/api/ai")
-@CrossOrigin(origins = "http://localhost:3000")
 @Validated
 public class AIController {
 
@@ -35,27 +42,27 @@ public class AIController {
         logger.info("🚀 Received async prediction request for video: {}", videoId);
 
         return aiProcessingService.processVideoAsync(videoId)
-            .thenApply(response -> {
-                if (response.isSuccess()) {
-                    logger.info("✅ Async prediction successful for video: {} - '{}' ({:.2f}%)",
-                              videoId, response.getPredictedText(), response.getConfidence() * 100);
+                .thenApply(response -> {
+                    if (response.isSuccess()) {
+                        logger.info("✅ Async prediction successful for video: {} - '{}' ({:.2f}%)",
+                                videoId, response.getPredictedText(), response.getConfidence() * 100);
 
-                    // Log normalization status
-                    if (response.isLowConfidence()) {
-                        logger.warn("⚠️ Low confidence prediction - possible normalization issue");
+                        // Log normalization status
+                        if (response.isLowConfidence()) {
+                            logger.warn("⚠️ Low confidence prediction - possible normalization issue");
+                        }
+
+                        return ResponseEntity.ok(response);
+                    } else {
+                        logger.warn("❌ Async prediction failed for video: {}. Error: {}", videoId, response.getError());
+                        return ResponseEntity.badRequest().body(response);
                     }
-
-                    return ResponseEntity.ok(response);
-                } else {
-                    logger.warn("❌ Async prediction failed for video: {}. Error: {}", videoId, response.getError());
-                    return ResponseEntity.badRequest().body(response);
-                }
-            })
-            .exceptionally(throwable -> {
-                logger.error("💥 Async prediction exception for video: " + videoId, throwable);
-                PredictionResponse errorResponse = PredictionResponse.error("Processing failed: " + throwable.getMessage());
-                return ResponseEntity.internalServerError().body(errorResponse);
-            });
+                })
+                .exceptionally(throwable -> {
+                    logger.error("💥 Async prediction exception for video: " + videoId, throwable);
+                    PredictionResponse errorResponse = PredictionResponse.error("Processing failed: " + throwable.getMessage());
+                    return ResponseEntity.internalServerError().body(errorResponse);
+                });
     }
 
     @PostMapping("/predict/{videoId}/sync")
@@ -67,7 +74,7 @@ public class AIController {
 
             if (response.isSuccess()) {
                 logger.info("✅ Sync prediction successful for video: {} - '{}' ({:.2f}%)",
-                          videoId, response.getPredictedText(), response.getConfidence() * 100);
+                        videoId, response.getPredictedText(), response.getConfidence() * 100);
 
                 // Enhanced logging for confidence levels
                 if (response.isHighConfidence()) {
@@ -119,9 +126,9 @@ public class AIController {
             // Log confidence statistics
             if (!predictions.isEmpty()) {
                 double avgConfidence = predictions.stream()
-                    .mapToDouble(p -> p.getConfidenceScore().doubleValue())
-                    .average()
-                    .orElse(0.0);
+                        .mapToDouble(p -> p.getConfidenceScore().doubleValue())
+                        .average()
+                        .orElse(0.0);
 
                 logger.info("📊 Average confidence for video {}: {:.2f}%", videoId, avgConfidence * 100);
             }
@@ -139,7 +146,7 @@ public class AIController {
             @RequestParam(defaultValue = "0.8") double minConfidence) {
         try {
             logger.debug("🎯 Fetching high confidence predictions for video: {} (min confidence: {:.2f})",
-                       videoId, minConfidence);
+                    videoId, minConfidence);
 
             List<SignLanguagePrediction> predictions = aiProcessingService.getHighConfidencePredictions(videoId, minConfidence);
 
@@ -162,7 +169,7 @@ public class AIController {
                 SignLanguagePrediction latest = predictions.get(0); // First is latest due to ORDER BY created_at DESC
 
                 logger.info("📝 Latest prediction for video {}: '{}' ({:.2f}%)",
-                          videoId, latest.getPredictedText(), latest.getConfidenceScore().doubleValue() * 100);
+                        videoId, latest.getPredictedText(), latest.getConfidenceScore().doubleValue() * 100);
 
                 return ResponseEntity.ok(latest);
             } else {
@@ -234,7 +241,7 @@ public class AIController {
             stats.put("videoId", videoId);
             stats.put("totalPredictions", predictionCount);
             stats.put("hasHighConfidencePredictions",
-                predictions.stream().anyMatch(p -> p.getConfidenceScore().doubleValue() >= 0.8));
+                    predictions.stream().anyMatch(p -> p.getConfidenceScore().doubleValue() >= 0.8));
 
             if (!predictions.isEmpty()) {
                 SignLanguagePrediction latest = predictions.get(0);
@@ -242,12 +249,12 @@ public class AIController {
                 stats.put("latestConfidence", latest.getConfidenceScore());
                 stats.put("latestProcessingTime", latest.getProcessingTimeMs());
                 stats.put("latestModelVersion", latest.getModelVersion());
-                stats.put("confidenceLevel", latest.getConfidenceScore().doubleValue() > 0.8 ? "HIGH" :
-                                           latest.getConfidenceScore().doubleValue() > 0.5 ? "MEDIUM" :
-                                           latest.getConfidenceScore().doubleValue() > 0.2 ? "LOW" : "VERY_LOW");
+                stats.put("confidenceLevel", latest.getConfidenceScore().doubleValue() > 0.8 ? "HIGH"
+                        : latest.getConfidenceScore().doubleValue() > 0.5 ? "MEDIUM"
+                        : latest.getConfidenceScore().doubleValue() > 0.2 ? "LOW" : "VERY_LOW");
 
                 logger.info("📊 Video {} statistics: {} predictions, latest confidence: {:.2f}%",
-                          videoId, predictionCount, latest.getConfidenceScore().doubleValue() * 100);
+                        videoId, predictionCount, latest.getConfidenceScore().doubleValue() * 100);
             }
 
             return ResponseEntity.ok(stats);
