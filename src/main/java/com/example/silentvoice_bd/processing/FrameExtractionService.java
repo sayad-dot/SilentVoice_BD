@@ -16,8 +16,11 @@ import javax.imageio.ImageIO;
 import org.bytedeco.javacv.FFmpegFrameGrabber;
 import org.bytedeco.javacv.Frame;
 import org.bytedeco.javacv.Java2DFrameConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.silentvoice_bd.config.VideoProcessingConfiguration;
 import com.example.silentvoice_bd.model.ExtractedFrame;
@@ -27,6 +30,8 @@ import com.example.silentvoice_bd.repository.ExtractedFrameRepository;
 
 @Service
 public class FrameExtractionService {
+
+    private static final Logger logger = LoggerFactory.getLogger(FrameExtractionService.class);
 
     @Autowired
     private ExtractedFrameRepository extractedFrameRepository;
@@ -74,10 +79,10 @@ public class FrameExtractionService {
 
                             // Create database record
                             ExtractedFrame extractedFrame = new ExtractedFrame(
-                                videoFile.getId(),
-                                frameNumber,
-                                BigDecimal.valueOf(currentTime),
-                                frameFile.getAbsolutePath()
+                                    videoFile.getId(),
+                                    frameNumber,
+                                    BigDecimal.valueOf(currentTime),
+                                    frameFile.getAbsolutePath()
                             );
                             extractedFrame.setWidth(bufferedImage.getWidth());
                             extractedFrame.setHeight(bufferedImage.getHeight());
@@ -109,16 +114,19 @@ public class FrameExtractionService {
         return extractedFrameRepository.findByVideoFileIdAndIsKeyframeTrue(videoFileId);
     }
 
+    @Transactional
     public void deleteFrames(UUID videoFileId) {
+        logger.info("🎞️ Deleting frames for video: {}", videoFileId);
+
         List<ExtractedFrame> frames = extractedFrameRepository.findByVideoFileIdOrderByTimestampSeconds(videoFileId);
 
         // Delete physical files
         for (ExtractedFrame frame : frames) {
             try {
                 Files.deleteIfExists(Paths.get(frame.getFilePath()));
+                logger.debug("🗑️ Deleted frame file: {}", frame.getFilePath());
             } catch (IOException e) {
-                // Log error but continue
-                System.err.println("Failed to delete frame file: " + frame.getFilePath());
+                logger.warn("⚠️ Failed to delete frame file {}: {}", frame.getFilePath(), e.getMessage());
             }
         }
 
@@ -128,9 +136,19 @@ public class FrameExtractionService {
         // Delete frame directory
         try {
             Path frameDir = Paths.get(config.getFramesOutputDir(), videoFileId.toString());
-            Files.deleteIfExists(frameDir);
+            if (Files.exists(frameDir)) {
+                Files.delete(frameDir);
+                logger.info("📁 Deleted frame directory: {}", frameDir);
+            }
         } catch (IOException e) {
-            System.err.println("Failed to delete frame directory for video: " + videoFileId);
+            logger.warn("⚠️ Failed to delete frame directory for video {}: {}", videoFileId, e.getMessage());
         }
+
+        logger.info("✅ Deleted {} frames for video: {}", frames.size(), videoFileId);
+    }
+
+    @Transactional
+    public void deleteFramesByVideoId(UUID videoFileId) {
+        deleteFrames(videoFileId);
     }
 }

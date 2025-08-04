@@ -148,25 +148,58 @@ class VideoService {
     }
   }
 
-  // Get video stream URL
+  // Get video stream URL with token for HTML video tag
   getVideoStreamUrl(videoId) {
     const token = getToken();
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    return `${API_BASE_URL}/videos/${videoId}/stream${tokenParam}`;
+    if (token) {
+      return `${API_BASE_URL}/videos/${videoId}/stream?token=${encodeURIComponent(token)}`;
+    } else {
+      console.warn('No token available for video streaming');
+      return `${API_BASE_URL}/videos/${videoId}/stream`;
+    }
   }
 
-  // Get video download URL
+  // FIXED: Get video download URL with correct endpoint and token
   getVideoDownloadUrl(videoId) {
     const token = getToken();
-    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
-    return `${API_BASE_URL}/videos/${videoId}${tokenParam}`;
+    if (token) {
+      return `${API_BASE_URL}/videos/${videoId}/download?token=${encodeURIComponent(token)}`;
+    } else {
+      return `${API_BASE_URL}/videos/${videoId}/download`;
+    }
   }
+  getVideoDownloadUrl(videoId) {
+  const token = getToken();
+  return `${API_BASE_URL}/videos/${videoId}/download?token=${encodeURIComponent(token)}`;
+}
 
   // Get video thumbnail URL (if needed)
   getVideoThumbnailUrl(videoId) {
     const token = getToken();
     const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
     return `${API_BASE_URL}/videos/${videoId}/thumbnail${tokenParam}`;
+  }
+
+  // Alternative method for video streaming with proper authentication
+  async getVideoStreamBlob(videoId) {
+    const token = getToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/videos/${videoId}/stream`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load video: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error('Error getting video stream:', error);
+      throw error;
+    }
   }
 }
 

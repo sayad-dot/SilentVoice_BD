@@ -161,151 +161,132 @@ const VideoUpload = () => {
   };
 
   // Fixed polling function with better response handling
-const startPolling = (videoId) => {
-  let attempts = 0;
-  const maxAttempts = 45;
+  const startPolling = (videoId) => {
+    let attempts = 0;
+    const maxAttempts = 45;
 
-  const poll = async () => {
-    attempts++;
-    console.log(`📡 Polling attempt ${attempts}/${maxAttempts} for video ${videoId}`);
+    const poll = async () => {
+      attempts++;
+      console.log(`📡 Polling attempt ${attempts}/${maxAttempts} for video ${videoId}`);
 
-    try {
-      // Check video status
-      const statusResponse = await videoService.getVideoStatus(videoId);
-      console.log('📊 Full status response:', statusResponse);
+      try {
+        // Check video status
+        const statusResponse = await videoService.getVideoStatus(videoId);
+        console.log('📊 Full status response:', statusResponse);
 
-      // Update progress
-      const progressPercent = Math.min(25 + (attempts / maxAttempts) * 65, 95);
-      setAiProgress(progressPercent);
+        // Update progress
+        const progressPercent = Math.min(25 + (attempts / maxAttempts) * 65, 95);
+        setAiProgress(progressPercent);
 
-      // Check multiple possible completion indicators
-      const isCompleted = statusResponse.processingStatus === 'COMPLETED' ||
-                         statusResponse.aiComplete === true ||
-                         statusResponse.status === 'COMPLETED';
+        // Check multiple possible completion indicators
+        const isCompleted = statusResponse.processingStatus === 'COMPLETED' ||
+                           statusResponse.aiComplete === true ||
+                           statusResponse.status === 'COMPLETED';
 
-      const isFailed = statusResponse.processingStatus === 'FAILED' ||
-                       statusResponse.status === 'FAILED' ||
-                       statusResponse.success === false;
+        const isFailed = statusResponse.processingStatus === 'FAILED' ||
+                         statusResponse.status === 'FAILED' ||
+                         statusResponse.success === false;
 
-      if (isCompleted) {
-        console.log('✅ Processing completed, extracting prediction data...');
+        if (isCompleted) {
+          console.log('✅ Processing completed, extracting prediction data...');
 
-        let predictionData = null;
+          let predictionData = null;
 
-        // Try to extract prediction from status response first
-        if (statusResponse.prediction || statusResponse.predictedText) {
-          console.log('🎯 Prediction found in status response');
-          predictionData = {
-            id: statusResponse.predictionId || `pred_${videoId}_${Date.now()}`,
-            predictedText: statusResponse.prediction || statusResponse.predictedText,
-            confidenceScore: statusResponse.confidence || statusResponse.confidenceScore || 0.95,
-            modelVersion: statusResponse.modelVersion || 'bangla_lstm_v1',
-            processingTimeMs: statusResponse.processingTime || statusResponse.processingTimeMs,
-            createdAt: new Date().toISOString()
-          };
-        } else {
-          // Fallback: try to get prediction from dedicated endpoint
-          console.log('🔍 No prediction in status, trying dedicated endpoint...');
-          try {
-            const prediction = await videoService.getLatestPrediction(videoId);
-            if (prediction) {
-              predictionData = {
-                id: prediction.id,
-                predictedText: prediction.predictedText,
-                confidenceScore: prediction.confidenceScore,
-                modelVersion: prediction.modelVersion || 'Unknown',
-                processingTimeMs: prediction.processingTimeMs,
-                createdAt: prediction.createdAt
-              };
+          // Try to extract prediction from status response first
+          if (statusResponse.prediction || statusResponse.predictedText) {
+            console.log('🎯 Prediction found in status response');
+            predictionData = {
+              id: statusResponse.predictionId || `pred_${videoId}_${Date.now()}`,
+              predictedText: statusResponse.prediction || statusResponse.predictedText,
+              confidenceScore: statusResponse.confidence || statusResponse.confidenceScore || 0.95,
+              modelVersion: statusResponse.modelVersion || 'bangla_lstm_v1',
+              processingTimeMs: statusResponse.processingTime || statusResponse.processingTimeMs,
+              createdAt: new Date().toISOString()
+            };
+          } else {
+            // Fallback: try to get prediction from dedicated endpoint
+            console.log('🔍 No prediction in status, trying dedicated endpoint...');
+            try {
+              const prediction = await videoService.getLatestPrediction(videoId);
+              if (prediction) {
+                predictionData = {
+                  id: prediction.id,
+                  predictedText: prediction.predictedText,
+                  confidenceScore: prediction.confidenceScore,
+                  modelVersion: prediction.modelVersion || 'Unknown',
+                  processingTimeMs: prediction.processingTimeMs,
+                  createdAt: prediction.createdAt
+                };
+              }
+            } catch (predError) {
+              console.warn('⚠️ Could not fetch from prediction endpoint:', predError);
             }
-          } catch (predError) {
-            console.warn('⚠️ Could not fetch from prediction endpoint:', predError);
           }
-        }
 
-        if (predictionData) {
-          console.log('🎉 Setting prediction data:', predictionData);
+          if (predictionData) {
+            console.log('🎉 Setting prediction data:', predictionData);
 
-          setPrediction(predictionData);
+            setPrediction(predictionData);
+            setAiProcessing(false);
+            setAiProgress(100);
+            setProcessingPhase('completed');
+            setSuccess(`🎉 AI analysis completed! Recognized: "${predictionData.predictedText}"`);
+
+            stopPolling();
+            return;
+          } else {
+            console.warn('⚠️ Processing marked complete but no prediction data found');
+            // Continue polling a bit more in case prediction is delayed
+            if (attempts > maxAttempts - 10) {
+              setError('AI processing completed but prediction data is not available yet.');
+              setAiProcessing(false);
+              setProcessingPhase('');
+              stopPolling();
+              return;
+            }
+          }
+        } else if (isFailed) {
+          console.error('❌ Processing failed:', statusResponse);
+          setError('AI processing failed. Please try again.');
           setAiProcessing(false);
-          setAiProgress(100);
-          setProcessingPhase('completed');
-          setSuccess(`🎉 AI analysis completed! Recognized: "${predictionData.predictedText}"`);
-
+          setProcessingPhase('');
           stopPolling();
           return;
         } else {
-          console.warn('⚠️ Processing marked complete but no prediction data found');
-          // Continue polling a bit more in case prediction is delayed
-          if (attempts > maxAttempts - 10) {
-            setError('AI processing completed but prediction data is not available yet.');
-            setAiProcessing(false);
-            setProcessingPhase('');
-            stopPolling();
-            return;
-          }
+          console.log('⏳ Still processing...', {
+            processingStatus: statusResponse.processingStatus,
+            aiComplete: statusResponse.aiComplete,
+            status: statusResponse.status
+          });
         }
-      } else if (isFailed) {
-        console.error('❌ Processing failed:', statusResponse);
-        setError('AI processing failed. Please try again.');
-        setAiProcessing(false);
-        setProcessingPhase('');
-        stopPolling();
-        return;
-      } else {
-        console.log('⏳ Still processing...', {
-          processingStatus: statusResponse.processingStatus,
-          aiComplete: statusResponse.aiComplete,
-          status: statusResponse.status
-        });
-      }
 
-      // Check if we've reached max attempts
-      if (attempts >= maxAttempts) {
-        console.warn('⚠️ Polling timeout reached');
-        setError('AI processing is taking longer than expected. The analysis may have completed - please check your video list.');
-        setAiProcessing(false);
-        setProcessingPhase('');
-        stopPolling();
-      }
+        // Check if we've reached max attempts
+        if (attempts >= maxAttempts) {
+          console.warn('⚠️ Polling timeout reached');
+          setError('AI processing is taking longer than expected. The analysis may have completed - please check your video list.');
+          setAiProcessing(false);
+          setProcessingPhase('');
+          stopPolling();
+        }
 
-    } catch (error) {
-      console.error(`❌ Polling error on attempt ${attempts}:`, error);
+      } catch (error) {
+        console.error(`❌ Polling error on attempt ${attempts}:`, error);
 
-      // Only stop if we've reached max attempts or it's an auth error
-      if (attempts >= maxAttempts || error.message?.includes('401')) {
-        setError('Unable to check AI processing status. Please refresh and check your videos.');
-        setAiProcessing(false);
-        setProcessingPhase('');
-        stopPolling();
+        // Only stop if we've reached max attempts or it's an auth error
+        if (attempts >= maxAttempts || error.message?.includes('401')) {
+          setError('Unable to check AI processing status. Please refresh and check your videos.');
+          setAiProcessing(false);
+          setProcessingPhase('');
+          stopPolling();
+        }
+        // Continue polling for other errors (temporary network issues)
       }
-      // Continue polling for other errors (temporary network issues)
-    }
+    };
+
+    // Start polling immediately, then every 3 seconds
+    poll();
+    pollIntervalRef.current = setInterval(poll, 3000);
   };
-
-  // Start polling immediately, then every 3 seconds
-  poll();
-  pollIntervalRef.current = setInterval(poll, 3000);
-};
-
-// Add this function right after the startPolling function
-const debugStatusResponse = (response) => {
-  console.log('🔧 DEBUG: Status Response Analysis');
-  console.log('📋 Response keys:', Object.keys(response));
-  console.log('📊 processingStatus:', response.processingStatus);
-  console.log('🤖 aiComplete:', response.aiComplete);
-  console.log('✅ success:', response.success);
-  console.log('📝 prediction:', response.prediction);
-  console.log('📝 predictedText:', response.predictedText);
-  console.log('📈 confidence:', response.confidence);
-  console.log('🏷️ modelVersion:', response.modelVersion);
-  console.log('⏱️ processingTime:', response.processingTime);
-  console.log('🆔 predictionId:', response.predictionId);
-  console.log('🔧 Full response:', JSON.stringify(response, null, 2));
-};
-
-
-
 
   // Stop polling function
   const stopPolling = () => {
@@ -518,7 +499,7 @@ const debugStatusResponse = (response) => {
         onVideoSelect={handleVideoSelect}
       />
 
-      {/* Video Modal */}
+      {/* FIXED Video Modal */}
       {selectedVideo && (
         <div className="video-modal" onClick={closeVideoModal}>
           <div className="video-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -530,9 +511,12 @@ const debugStatusResponse = (response) => {
               controls
               width="100%"
               height="400"
-              src={videoService.getVideoStreamUrl(selectedVideo.id)}
               onError={() => console.error('Video playback error')}
             >
+              <source 
+                src={videoService.getVideoStreamUrl(selectedVideo.id)}
+                type={selectedVideo.contentType || 'video/mp4'}
+              />
               Your browser does not support the video tag.
             </video>
 

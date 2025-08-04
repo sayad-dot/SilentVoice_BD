@@ -17,20 +17,35 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/auth")
+// REMOVED @CrossOrigin - handled by SecurityConfig CORS configuration
 @RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@Valid @RequestBody RegisterRequest request) {
-        authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+        try {
+            authService.register(request);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body("User registered successfully");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body("Registration failed: " + e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Registration failed: " + e.getMessage());
+        }
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
-        AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> login(@Valid @RequestBody AuthRequest request) {
+        try {
+            AuthResponse response = authService.login(request);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body("Login failed: Invalid credentials");
+        }
     }
 }

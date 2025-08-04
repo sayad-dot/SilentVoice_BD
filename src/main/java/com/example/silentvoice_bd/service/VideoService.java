@@ -13,22 +13,32 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.apache.tika.Tika;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.silentvoice_bd.ai.services.AIProcessingService;
 import com.example.silentvoice_bd.config.FileStorageProperties;
 import com.example.silentvoice_bd.exception.FileUploadException;
 import com.example.silentvoice_bd.model.VideoFile;
+import com.example.silentvoice_bd.processing.FrameExtractionService;
 import com.example.silentvoice_bd.processing.VideoProcessingService;
+import com.example.silentvoice_bd.repository.VideoMetadataRepository;
+import com.example.silentvoice_bd.repository.VideoProcessingJobRepository;
 import com.example.silentvoice_bd.repository.VideoRepository;
 
 import jakarta.annotation.PostConstruct;
 
 @Service
 public class VideoService {
+
+    private static final Logger logger = LoggerFactory.getLogger(VideoService.class);
 
     private final VideoRepository videoRepository;
     private final FileStorageProperties fileStorageProperties;
@@ -39,6 +49,18 @@ public class VideoService {
     // BdSLW-60 dataset configuration
     private final String DATASET_PATH = "dataset/bdslw60/archive";
     private final Random random = new Random();
+
+    @Autowired(required = false)
+    private VideoProcessingJobRepository videoProcessingJobRepository;
+
+    @Autowired(required = false)
+    private FrameExtractionService frameExtractionService;
+
+    @Autowired(required = false)
+    private AIProcessingService aiProcessingService;
+
+    @Autowired(required = false)
+    private VideoMetadataRepository videoMetadataRepository;
 
     public VideoService(VideoRepository videoRepository, FileStorageProperties fileStorageProperties,
             VideoProcessingService videoProcessingService) {
@@ -125,15 +147,80 @@ public class VideoService {
         }
     }
 
+    @Transactional
     public void deleteVideoFile(UUID id) {
         VideoFile videoFile = videoRepository.findById(id)
                 .orElseThrow(() -> new FileUploadException("Video file not found with id: " + id));
 
         try {
-            Path filePath = Paths.get(videoFile.getFilePath());
-            Files.deleteIfExists(filePath);
+            logger.info("🗑️ Starting cascade delete for video: {} ({})", videoFile.getOriginalFilename(), id);
+
+            // Step 1: Delete AI predictions first
+            if (aiProcessingService != null) {
+                try {
+                    logger.info("🤖 Deleting AI predictions for video: {}", id);
+                    aiProcessingService.deletePredictionsByVideoId(id);
+                    logger.info("✅ AI predictions deleted for video: {}", id);
+                } catch (Exception e) {
+                    logger.warn("⚠️ Failed to delete AI predictions for video {}: {}", id, e.getMessage());
+                }
+            }
+
+            // Step 2: Delete extracted frames
+            if (frameExtractionService != null) {
+                try {
+                    logger.info("🎞️ Deleting extracted frames for video: {}", id);
+                    frameExtractionService.deleteFramesByVideoId(id);
+                    logger.info("✅ Extracted frames deleted for video: {}", id);
+                } catch (Exception e) {
+                    logger.warn("⚠️ Failed to delete frames for video {}: {}", id, e.getMessage());
+                }
+            }
+
+            // Step 3: Delete video metadata (THIS WAS MISSING!)
+            if (videoMetadataRepository != null) {
+                try {
+                    logger.info("📊 Deleting video metadata for video: {}", id);
+                    videoMetadataRepository.deleteByVideoFileId(id);
+                    logger.info("✅ Video metadata deleted for video: {}", id);
+                } catch (Exception e) {
+                    logger.error("❌ Failed to delete video metadata for video {}: {}", id, e.getMessage());
+                    throw new FileUploadException("Failed to delete video metadata for video: " + id, e);
+                }
+            }
+
+            // Step 4: Delete video processing jobs
+            if (videoProcessingJobRepository != null) {
+                try {
+                    logger.info("⚙️ Deleting processing jobs for video: {}", id);
+                    videoProcessingJobRepository.deleteByVideoFileId(id);
+                    logger.info("✅ Processing jobs deleted for video: {}", id);
+                } catch (Exception e) {
+                    logger.error("❌ Failed to delete processing jobs for video {}: {}", id, e.getMessage());
+                    throw new FileUploadException("Failed to delete processing jobs for video: " + id, e);
+                }
+            }
+
+            // Step 5: Delete physical file
+            try {
+                Path filePath = Paths.get(videoFile.getFilePath());
+                if (Files.exists(filePath)) {
+                    Files.delete(filePath);
+                    logger.info("📁 Physical file deleted: {}", filePath);
+                } else {
+                    logger.warn("⚠️ Physical file not found: {}", filePath);
+                }
+            } catch (IOException e) {
+                logger.warn("⚠️ Failed to delete physical file for video {}: {}", id, e.getMessage());
+            }
+
+            // Step 6: Finally delete the video record
             videoRepository.delete(videoFile);
-        } catch (IOException ex) {
+            logger.info("✅ Video record deleted from database: {}", id);
+            logger.info("🎉 Complete cascade deletion successful for video: {}", id);
+
+        } catch (Exception ex) {
+            logger.error("💥 Failed to delete video {}: {}", id, ex.getMessage(), ex);
             throw new FileUploadException("Could not delete file: " + videoFile.getFilename(), ex);
         }
     }
@@ -156,7 +243,7 @@ public class VideoService {
                 }
             }
         } catch (IOException e) {
-            System.err.println("Error accessing videos for sign: " + signName);
+            logger.error("Error accessing videos for sign: " + signName, e);
         }
         return null;
     }
@@ -174,7 +261,7 @@ public class VideoService {
                         .collect(Collectors.toList());
             }
         } catch (IOException e) {
-            System.err.println("Error accessing videos for sign: " + signName);
+            logger.error("Error accessing videos for sign: " + signName, e);
         }
         return List.of();
     }
@@ -192,7 +279,7 @@ public class VideoService {
                         .collect(Collectors.toList());
             }
         } catch (IOException e) {
-            System.err.println("Error accessing dataset signs");
+            logger.error("Error accessing dataset signs", e);
         }
         return List.of();
     }
@@ -224,6 +311,14 @@ public class VideoService {
     public boolean isDatasetAvailable() {
         Path archivePath = Paths.get(DATASET_PATH);
         return Files.exists(archivePath) && Files.isDirectory(archivePath);
+    }
+
+    public String getVideoStreamUrl(UUID id) {
+        return "/api/videos/" + id + "/stream";
+    }
+
+    public String getVideoDownloadUrl(UUID id) {
+        return "/api/videos/" + id;
     }
 
     // ========== PRIVATE HELPER METHODS ==========

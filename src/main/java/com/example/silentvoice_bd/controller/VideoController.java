@@ -1,5 +1,8 @@
 package com.example.silentvoice_bd.controller;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,8 +12,8 @@ import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,10 +28,13 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.example.silentvoice_bd.ai.models.SignLanguagePrediction;
 import com.example.silentvoice_bd.ai.services.AIProcessingService;
+import com.example.silentvoice_bd.auth.security.JwtTokenProvider;
 import com.example.silentvoice_bd.dto.VideoUploadResponse;
 import com.example.silentvoice_bd.model.VideoFile;
 import com.example.silentvoice_bd.processing.VideoProcessingService;
 import com.example.silentvoice_bd.service.VideoService;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/videos")
@@ -39,6 +45,9 @@ public class VideoController {
     private final VideoService videoService;
     private final VideoProcessingService videoProcessingService;
     private final AIProcessingService aiProcessingService;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     public VideoController(
             VideoService videoService,
@@ -198,51 +207,6 @@ public class VideoController {
         return ResponseEntity.ok(videos);
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Resource> downloadVideo(@PathVariable UUID id) {
-        logger.info("⬇️ Download request for video: {}", id);
-        Resource resource = videoService.loadVideoFileAsResource(id);
-        Optional<VideoFile> videoFile = videoService.getVideoFile(id);
-
-        return videoFile.map(file -> {
-            logger.info("✅ Serving download for: {}", file.getOriginalFilename());
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(file.getContentType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + file.getOriginalFilename() + "\"")
-                    .body(resource);
-        }).orElseGet(() -> {
-            logger.warn("❌ Video not found for download: {}", id);
-            return ResponseEntity.notFound().build();
-        });
-    }
-
-    @GetMapping("/{id}/stream")
-    public ResponseEntity<Resource> streamVideo(@PathVariable UUID id) {
-        logger.info("📺 Stream request for video: {}", id);
-        Resource resource = videoService.loadVideoFileAsResource(id);
-        Optional<VideoFile> videoFile = videoService.getVideoFile(id);
-
-        return videoFile.map(file -> {
-            logger.info("✅ Serving stream for: {}", file.getOriginalFilename());
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(file.getContentType()))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
-                    .body(resource);
-        }).orElseGet(() -> {
-            logger.warn("❌ Video not found for streaming: {}", id);
-            return ResponseEntity.notFound().build();
-        });
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteVideo(@PathVariable UUID id) {
-        logger.info("🗑️ Delete request for video: {}", id);
-        videoService.deleteVideoFile(id);
-        logger.info("✅ Video deleted successfully: {}", id);
-        return ResponseEntity.ok("Video deleted successfully");
-    }
-
     @GetMapping("/{id}/info")
     public ResponseEntity<VideoFile> getVideoInfo(@PathVariable UUID id) {
         logger.info("ℹ️ Info request for video: {}", id);
@@ -255,4 +219,118 @@ public class VideoController {
             return ResponseEntity.notFound().build();
         });
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deleteVideo(@PathVariable UUID id) {
+        logger.info("🗑️ Delete request for video: {}", id);
+        videoService.deleteVideoFile(id);
+        logger.info("✅ Video deleted successfully: {}", id);
+        return ResponseEntity.ok("Video deleted successfully");
+    }
+
+    @GetMapping("/{id}/stream")
+    public ResponseEntity<Resource> streamVideo(
+            @PathVariable UUID id,
+            @RequestParam(value = "token", required = false) String token,
+            HttpServletRequest request) {
+
+        logger.info("🎬 Stream request for video: {}", id);
+
+        try {
+            // Validate authentication - either token parameter or header
+            boolean authenticated = false;
+            String username = null;
+
+            // Try token parameter first (for HTML video tags)
+            if (token != null && !token.isEmpty()) {
+                try {
+                    if (jwtTokenProvider.validateToken(token)) {
+                        username = jwtTokenProvider.getEmailFromToken(token);
+                        authenticated = true;
+                        logger.info("✅ Token parameter validated for user: {}", username);
+                    }
+                } catch (Exception e) {
+                    logger.warn("⚠️ Token parameter validation failed: {}", e.getMessage());
+                }
+            }
+
+            // Try Authorization header (fallback)
+            if (!authenticated) {
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    try {
+                        String headerToken = authHeader.substring(7);
+                        if (jwtTokenProvider.validateToken(headerToken)) {
+                            username = jwtTokenProvider.getEmailFromToken(headerToken);
+                            authenticated = true;
+                            logger.info("✅ Authorization header validated for user: {}", username);
+                        }
+                    } catch (Exception e) {
+                        logger.warn("⚠️ Authorization header validation failed: {}", e.getMessage());
+                    }
+                }
+            }
+
+            // Require authentication
+            if (!authenticated) {
+                logger.warn("❌ No valid authentication for video stream: {}", id);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(null);
+            }
+
+            // Load and stream video
+            Resource videoResource = videoService.loadVideoFileAsResource(id);
+
+            // Determine content type
+            String contentType = "video/mp4";
+            try {
+                Path videoPath = Paths.get(videoResource.getURI());
+                String detectedType = Files.probeContentType(videoPath);
+                if (detectedType != null) {
+                    contentType = detectedType;
+                }
+            } catch (Exception e) {
+                logger.debug("Could not determine content type for video: {}", id);
+            }
+
+            logger.info("✅ Streaming video: {} for user: {} ({})", id, username, contentType);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header("Accept-Ranges", "bytes")
+                    .header("Cache-Control", "no-cache, no-store, must-revalidate")
+                    .header("Pragma", "no-cache")
+                    .header("Expires", "0")
+                    .body(videoResource);
+
+        } catch (Exception e) {
+            logger.error("💥 Error streaming video {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    // Use your EXACT original VideoController.java code that was working
+// ONLY add this single method at the end:
+
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadVideo(
+            @PathVariable UUID id,
+            @RequestParam(value = "token", required = false) String token,
+            HttpServletRequest request) {
+
+        logger.info("📥 Download request for video: {}", id);
+
+        // Simple token check
+        if (token != null && jwtTokenProvider.validateToken(token)) {
+            Resource resource = videoService.loadVideoFileAsResource(id);
+            Optional<VideoFile> videoFile = videoService.getVideoFile(id);
+            String filename = videoFile.map(VideoFile::getOriginalFilename).orElse("video.mp4");
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                    .header("Content-Disposition", "attachment; filename=\"" + filename + "\"")
+                    .body(resource);
+        }
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
 }

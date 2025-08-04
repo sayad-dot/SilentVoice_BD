@@ -57,26 +57,42 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF (we're a stateless REST + WS API)
+                // Disable CSRF (we're a stateless REST API)
                 .csrf(csrf -> csrf.disable())
-                // Enable CORS with our configuration (see corsConfigurationSource() below)
+                // Enable CORS with our configuration
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 // Do not create sessions; every request must carry a token
                 .sessionManagement(session
                         -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                // Authorization rules
+                // Authorization rules - ORDER MATTERS!
                 .authorizeHttpRequests(auth -> auth
-                // Public REST endpoints
+                // CRITICAL: Public authentication endpoints FIRST
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/auth/**").permitAll()
+                // Public endpoints
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Video endpoints - streaming and download allowed, others require auth
+                .requestMatchers(HttpMethod.POST, "/api/videos/upload").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/videos").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/videos/*/info").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/videos/*/status").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/videos/**").authenticated()
+                // Allow streaming and download (handled by controller token validation)
+                .requestMatchers(HttpMethod.GET, "/api/videos/*/stream").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/videos/*/download").permitAll()
+                // Audio endpoints require authentication
+                .requestMatchers(HttpMethod.GET, "/api/audio/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/audio/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/audio/**").authenticated()
+                // AI endpoints require authentication
+                .requestMatchers("/api/ai/**").authenticated()
                 // Allow media endpoints for BdSLW-60 videos
                 .requestMatchers("/api/media/**").permitAll()
-                // Learning endpoints require authentication (covers /chat and /feedback)
+                // Learning endpoints require authentication
                 .requestMatchers("/api/learning/**").authenticated()
                 // Allow all SockJS/WebSocket handshake traffic
                 .requestMatchers("/ws/**").permitAll()
-                // Preflight requests
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // Swagger / OpenAPI
                 .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**")
                 .permitAll()

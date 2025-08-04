@@ -20,7 +20,7 @@ import com.example.silentvoice_bd.learning.dto.ChatResponse;
 import com.example.silentvoice_bd.learning.service.ChatbotService;
 
 @RestController
-@RequestMapping("/api/learning/chatbot")
+@RequestMapping("/api/learning")
 @CrossOrigin(origins = "*")
 public class ChatbotController {
 

@@ -1,16 +1,24 @@
 package com.example.silentvoice_bd.model;
 
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "video_metadata")
 public class VideoMetadata {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @Column(name = "video_file_id", nullable = false)
@@ -22,13 +30,13 @@ public class VideoMetadata {
     @Column(name = "frame_rate", precision = 5, scale = 2)
     private BigDecimal frameRate;
 
-    @Column
+    @Column(name = "width")
     private Integer width;
 
-    @Column
+    @Column(name = "height")
     private Integer height;
 
-    @Column
+    @Column(name = "bitrate")
     private Integer bitrate;
 
     @Column(name = "video_codec", length = 50)
@@ -50,49 +58,178 @@ public class VideoMetadata {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     // Constructors
-    public VideoMetadata() {}
+    public VideoMetadata() {
+    }
 
     public VideoMetadata(UUID videoFileId) {
         this.videoFileId = videoFileId;
+        this.createdAt = LocalDateTime.now();
     }
 
     // Getters and setters
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public UUID getId() {
+        return id;
+    }
 
-    public UUID getVideoFileId() { return videoFileId; }
-    public void setVideoFileId(UUID videoFileId) { this.videoFileId = videoFileId; }
+    public void setId(UUID id) {
+        this.id = id;
+    }
 
-    public Integer getDurationSeconds() { return durationSeconds; }
-    public void setDurationSeconds(Integer durationSeconds) { this.durationSeconds = durationSeconds; }
+    public UUID getVideoFileId() {
+        return videoFileId;
+    }
 
-    public BigDecimal getFrameRate() { return frameRate; }
-    public void setFrameRate(BigDecimal frameRate) { this.frameRate = frameRate; }
+    public void setVideoFileId(UUID videoFileId) {
+        this.videoFileId = videoFileId;
+    }
 
-    public Integer getWidth() { return width; }
-    public void setWidth(Integer width) { this.width = width; }
+    public Integer getDurationSeconds() {
+        return durationSeconds;
+    }
 
-    public Integer getHeight() { return height; }
-    public void setHeight(Integer height) { this.height = height; }
+    public void setDurationSeconds(Integer durationSeconds) {
+        this.durationSeconds = durationSeconds;
+    }
 
-    public Integer getBitrate() { return bitrate; }
-    public void setBitrate(Integer bitrate) { this.bitrate = bitrate; }
+    public BigDecimal getFrameRate() {
+        return frameRate;
+    }
 
-    public String getVideoCodec() { return videoCodec; }
-    public void setVideoCodec(String videoCodec) { this.videoCodec = videoCodec; }
+    public void setFrameRate(BigDecimal frameRate) {
+        this.frameRate = frameRate;
+    }
 
-    public String getAudioCodec() { return audioCodec; }
-    public void setAudioCodec(String audioCodec) { this.audioCodec = audioCodec; }
+    public Integer getWidth() {
+        return width;
+    }
 
-    public String getFileFormat() { return fileFormat; }
-    public void setFileFormat(String fileFormat) { this.fileFormat = fileFormat; }
+    public void setWidth(Integer width) {
+        this.width = width;
+    }
 
-    public Boolean getHasAudio() { return hasAudio; }
-    public void setHasAudio(Boolean hasAudio) { this.hasAudio = hasAudio; }
+    public Integer getHeight() {
+        return height;
+    }
 
-    public String getThumbnailPath() { return thumbnailPath; }
-    public void setThumbnailPath(String thumbnailPath) { this.thumbnailPath = thumbnailPath; }
+    public void setHeight(Integer height) {
+        this.height = height;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public Integer getBitrate() {
+        return bitrate;
+    }
+
+    public void setBitrate(Integer bitrate) {
+        this.bitrate = bitrate;
+    }
+
+    public String getVideoCodec() {
+        return videoCodec;
+    }
+
+    public void setVideoCodec(String videoCodec) {
+        this.videoCodec = videoCodec;
+    }
+
+    public String getAudioCodec() {
+        return audioCodec;
+    }
+
+    public void setAudioCodec(String audioCodec) {
+        this.audioCodec = audioCodec;
+    }
+
+    public String getFileFormat() {
+        return fileFormat;
+    }
+
+    public void setFileFormat(String fileFormat) {
+        this.fileFormat = fileFormat;
+    }
+
+    public Boolean getHasAudio() {
+        return hasAudio;
+    }
+
+    public void setHasAudio(Boolean hasAudio) {
+        this.hasAudio = hasAudio;
+    }
+
+    public String getThumbnailPath() {
+        return thumbnailPath;
+    }
+
+    public void setThumbnailPath(String thumbnailPath) {
+        this.thumbnailPath = thumbnailPath;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
+
+    // Utility methods
+    public String getResolutionString() {
+        if (width != null && height != null) {
+            return width + "x" + height;
+        }
+        return "Unknown";
+    }
+
+    public String getDurationFormatted() {
+        if (durationSeconds == null) {
+            return "Unknown";
+        }
+
+        int hours = durationSeconds / 3600;
+        int minutes = (durationSeconds % 3600) / 60;
+        int seconds = durationSeconds % 60;
+
+        if (hours > 0) {
+            return String.format("%d:%02d:%02d", hours, minutes, seconds);
+        } else {
+            return String.format("%d:%02d", minutes, seconds);
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "VideoMetadata{"
+                + "id=" + id
+                + ", videoFileId=" + videoFileId
+                + ", resolution=" + getResolutionString()
+                + ", duration=" + getDurationFormatted()
+                + ", codec='" + videoCodec + '\''
+                + ", format='" + fileFormat + '\''
+                + ", hasAudio=" + hasAudio
+                + ", createdAt=" + createdAt
+                + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        VideoMetadata that = (VideoMetadata) o;
+        return id != null && id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,13 +44,25 @@ public class ChatbotService {
 
     public ChatResponse processMessage(ChatMessage message, UUID userId) {
         try {
+            // Debug logging
+            System.out.println("Processing message: " + message.getContent());
+            System.out.println("User ID: " + userId);
+            System.out.println("Lesson ID: " + message.getLessonId());
+
+            // Validate message content
+            if (message.getContent() == null || message.getContent().trim().isEmpty()) {
+                throw new IllegalArgumentException("Message content cannot be null or empty");
+            }
+
             // Save user message
             ChatConversation userMessage = new ChatConversation();
             userMessage.setUserId(userId);
             userMessage.setLessonId(message.getLessonId());
-            userMessage.setMessage(message.getContent());
+            userMessage.setMessage(message.getContent().trim());
             userMessage.setSender("USER");
+            userMessage.setContextData(message.getContextDataAsJson());
             userMessage.setCreatedAt(LocalDateTime.now());
+
             conversationRepository.save(userMessage);
 
             // Get conversation context
@@ -66,7 +79,9 @@ public class ChatbotService {
             botMessage.setLessonId(message.getLessonId());
             botMessage.setMessage(botResponse);
             botMessage.setSender("BOT");
+            botMessage.setContextData(message.getContextDataAsJson());
             botMessage.setCreatedAt(LocalDateTime.now());
+
             conversationRepository.save(botMessage);
 
             ChatResponse response = new ChatResponse();
@@ -78,13 +93,15 @@ public class ChatbotService {
             return response;
 
         } catch (Exception e) {
+            System.err.println("Error processing message: " + e.getMessage());
+            e.printStackTrace();
+
             ChatResponse errorResponse = new ChatResponse();
             errorResponse.setContent("I'm having trouble responding right now. Please try again in a moment.");
             errorResponse.setSender("BOT");
             errorResponse.setTimestamp(LocalDateTime.now());
             errorResponse.setIsError(true);
             errorResponse.setErrorMessage(e.getMessage());
-
             return errorResponse;
         }
     }
@@ -96,7 +113,7 @@ public class ChatbotService {
 
         try {
             // Build conversation context for OpenAI
-            List<Map<String, String>> messages = new ArrayList<>();
+            List<Map<String, Object>> messages = new ArrayList<>();
 
             // System prompt - customize for sign language learning
             messages.add(Map.of("role", "system",
@@ -142,13 +159,14 @@ public class ChatbotService {
                     .bodyToMono(Map.class);
 
             Map<String, Object> responseMap = response.block();
-
             if (responseMap != null && responseMap.containsKey("choices")) {
+                @SuppressWarnings("unchecked")
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
                 if (!choices.isEmpty()) {
                     Map<String, Object> choice = choices.get(0);
-                    Map<String, String> messageContent = (Map<String, String>) choice.get("message");
-                    return messageContent.get("content").trim();
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> messageContent = (Map<String, Object>) choice.get("message");
+                    return messageContent.get("content").toString().trim();
                 }
             }
 
@@ -163,23 +181,57 @@ public class ChatbotService {
         }
     }
 
-    private String getFallbackResponse(String userMessage) {
-        String lowerMessage = userMessage.toLowerCase();
+    // Helper method to check if message contains any of the keywords as whole words
+    private boolean containsKeywords(String message, String... keywords) {
+        String lowerMessage = message.toLowerCase();
+        for (String keyword : keywords) {
+            // Use word boundary regex to match whole words only
+            Pattern pattern = Pattern.compile("\\b" + Pattern.quote(keyword.toLowerCase()) + "\\b");
+            if (pattern.matcher(lowerMessage).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-        if (lowerMessage.contains("help") || lowerMessage.contains("confused") || lowerMessage.contains("don't understand")) {
+    private String getFallbackResponse(String userMessage) {
+        // Debug logging
+        System.out.println("Using fallback response for: " + userMessage);
+
+        // Use whole word matching to avoid false positives
+        if (containsKeywords(userMessage, "hello", "hi", "hey", "start", "greetings")) {
+            return "Hello! I'm here to help you learn Bangla sign language. What would you like to practice today?";
+
+        } else if (containsKeywords(userMessage, "help", "confused", "don't understand", "stuck", "trouble", "issue", "problem", "struggling")) {
             return "I'm here to help! Can you tell me which specific sign you're having trouble with? I can guide you through the hand positions step by step.";
-        } else if (lowerMessage.contains("hand") || lowerMessage.contains("finger") || lowerMessage.contains("position")) {
+
+        } else if (containsKeywords(userMessage, "hand", "hands", "finger", "fingers", "position", "positioning", "placement")) {
             return "For better hand positioning, make sure your fingers are clearly visible and movements are distinct. Practice slowly first, then gradually increase speed!";
-        } else if (lowerMessage.contains("wrong") || lowerMessage.contains("mistake") || lowerMessage.contains("incorrect")) {
+
+        } else if (containsKeywords(userMessage, "wrong", "mistake", "incorrect", "error", "bad", "not right")) {
             return "Don't worry about mistakes - they're part of learning! Try breaking down the sign into smaller movements and practice each part separately.";
-        } else if (lowerMessage.contains("good") || lowerMessage.contains("correct") || lowerMessage.contains("right")) {
+
+        } else if (containsKeywords(userMessage, "good", "great", "correct", "right", "perfect", "excellent", "awesome")) {
             return "Excellent work! Keep practicing to build muscle memory. Consistency is key to mastering sign language.";
-        } else if (lowerMessage.contains("difficult") || lowerMessage.contains("hard") || lowerMessage.contains("struggling")) {
+
+        } else if (containsKeywords(userMessage, "difficult", "hard", "challenging", "tough", "struggling", "can't")) {
             return "I understand it can be challenging! Remember, every expert was once a beginner. Take your time and practice regularly - you've got this!";
-        } else if (lowerMessage.contains("culture") || lowerMessage.contains("bangladesh") || lowerMessage.contains("deaf")) {
+
+        } else if (containsKeywords(userMessage, "culture", "cultural", "bangladesh", "bengali", "bangla", "deaf", "community", "important", "significance")) {
             return "Bangla sign language is used by over 200,000 deaf individuals in Bangladesh. It has its own rich grammar and cultural expressions. Learning it helps build bridges in our community!";
-        } else if (lowerMessage.contains("thank") || lowerMessage.contains("thanks")) {
+
+        } else if (containsKeywords(userMessage, "practice", "practicing", "tip", "tips", "advice", "improve", "better", "how to")) {
+            return "Try practicing in front of a mirror to see your signs clearly. Practice regularly for short periods rather than long sessions. Start with basic signs and gradually work up to more complex ones.";
+
+        } else if (containsKeywords(userMessage, "mean", "meaning", "means", "what is", "what does", "definition", "translate")) {
+            return "I can help explain sign meanings! Which specific sign would you like to know about? Describe the hand movement or gesture you're curious about.";
+
+        } else if (containsKeywords(userMessage, "learn", "learning", "study", "studying", "teach", "education")) {
+            return "Learning sign language is a wonderful journey! It takes time and practice, but every step helps you connect with the deaf community. What specific aspect would you like to focus on?";
+
+        } else if (containsKeywords(userMessage, "thank", "thanks", "appreciate", "grateful")) {
             return "You're very welcome! I'm always here to help you on your sign language learning journey. Keep up the great work!";
+
         } else {
             return "I'm here to support your sign language learning! Feel free to ask about hand positions, sign meanings, practice tips, or anything else you'd like to know.";
         }
