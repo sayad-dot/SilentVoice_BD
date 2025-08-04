@@ -7,6 +7,7 @@ const LoadingSpinner = ({ size = 'medium', message = '' }) => {
     <div className="loading-container">
       <div className={`spinner ${sizeClass}`}>
         <div className="spinner-circle"></div>
+        <div className="spinner-glow"></div>
       </div>
       {message && <p className="loading-message">{message}</p>}
     </div>

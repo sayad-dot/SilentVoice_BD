@@ -4,7 +4,7 @@ import { getValidationErrors } from '../../utils/validation';
 import AuthLayout from './AuthLayout';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
-
+import { FaGoogle, FaFacebookF } from 'react-icons/fa';
 const Login = ({ onSwitchToRegister }) => {
   const { login, loading, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
@@ -12,6 +12,7 @@ const Login = ({ onSwitchToRegister }) => {
     password: ''
   });
   const [formErrors, setFormErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -36,7 +37,7 @@ const Login = ({ onSwitchToRegister }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    
     // Validate form
     const errors = getValidationErrors(formData, true);
     if (Object.keys(errors).length > 0) {
@@ -46,7 +47,7 @@ const Login = ({ onSwitchToRegister }) => {
 
     // Clear previous errors
     setFormErrors({});
-
+    
     // Attempt login
     const result = await login(formData.email, formData.password);
     if (!result.success) {
@@ -56,59 +57,100 @@ const Login = ({ onSwitchToRegister }) => {
   };
 
   return (
-    <AuthLayout
-
-      subtitle="Sign in to access your dashboard"
+    <AuthLayout 
+      title="Welcome Back" 
+      subtitle="Sign in to continue your sign language journey"
     >
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <ErrorMessage message={error} />}
-
+        
         <div className="form-group">
-          <label htmlFor="email">Email Address</label>
-          <input
-            type="email"
-            id="email"
-            name="email"
-            value={formData.email}
-            onChange={handleInputChange}
-            className={formErrors.email ? 'error' : ''}
-            placeholder="Enter your email"
-            disabled={loading}
-          />
+          <div className="input-container">
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              className={`form-input ${formErrors.email ? 'error' : ''} ${formData.email ? 'filled' : ''}`}
+              placeholder=" "
+              required
+            />
+            <label className="form-label">Email Address</label>
+            <div className="input-icon">
+              📧
+            </div>
+          </div>
           {formErrors.email && <span className="error-text">{formErrors.email}</span>}
         </div>
 
         <div className="form-group">
-          <label htmlFor="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            className={formErrors.password ? 'error' : ''}
-            placeholder="Enter your password"
-            disabled={loading}
-          />
+          <div className="input-container">
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className={`form-input ${formErrors.password ? 'error' : ''} ${formData.password ? 'filled' : ''}`}
+              placeholder=" "
+              required
+            />
+            <label className="form-label">Password</label>
+            <div className="input-icon">
+              🔒
+            </div>
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
           {formErrors.password && <span className="error-text">{formErrors.password}</span>}
         </div>
 
-        <button
-          type="submit"
-          className="auth-btn primary"
+        <div className="form-options">
+          <label className="checkbox-container">
+            <input type="checkbox" />
+            <span className="checkmark"></span>
+            Remember me
+          </label>
+          <a href="#" className="forgot-link">Forgot password?</a>
+        </div>
+
+        <button 
+          type="submit" 
+          className="auth-btn primary" 
           disabled={loading}
         >
-          {loading ? <LoadingSpinner size="small" /> : 'Sign In'}
+          {loading ? <LoadingSpinner size="small" /> : (
+            <>
+              <span>Sign In</span>
+              <div className="btn-icon">🚀</div>
+            </>
+          )}
         </button>
+
+        <div className="divider">
+          <span>or continue with</span>
+        </div>
+
+<div className="social-login">
+  <button type="button" className="social-btn google">
+    <FaGoogle className="social-icon" />
+  </button>
+  <button type="button" className="social-btn facebook">
+    <FaFacebookF className="social-icon" />
+  </button>
+</div>
       </form>
 
       <div className="auth-footer">
         <p>
-          Don't have an account?
-          <button
-            type="button"
+          Don't have an account?{' '}
+          <button 
+            className="link-button" 
             onClick={onSwitchToRegister}
-            className="link-button"
             disabled={loading}
           >
             Register here
