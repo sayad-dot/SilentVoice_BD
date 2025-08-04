@@ -36,6 +36,15 @@ public class ChatMessage {
 
         @JsonProperty("current_sign")
         private String currentSign;
+
+        @JsonProperty("page_context")
+        private String pageContext;
+
+        @JsonProperty("page_features")
+        private String[] pageFeatures;
+
+        @JsonProperty("is_global")
+        private Boolean isGlobal;
     }
 
     // Helper method to extract lessonId from context
@@ -53,14 +62,16 @@ public class ChatMessage {
     public String getContextDataAsJson() {
         if (this.lessonContext != null) {
             try {
-                return String.format("{\"lesson_title\":\"%s\",\"current_sign\":\"%s\",\"lesson_id\":%d}",
+                return String.format("{\"lesson_title\":\"%s\",\"current_sign\":\"%s\",\"lesson_id\":%s,\"page_context\":\"%s\",\"is_global\":%s}",
                         lessonContext.getLessonTitle() != null ? lessonContext.getLessonTitle() : "",
                         lessonContext.getCurrentSign() != null ? lessonContext.getCurrentSign() : "",
-                        lessonContext.getLessonId() != null ? lessonContext.getLessonId() : 0);
+                        lessonContext.getLessonId() != null ? lessonContext.getLessonId() : "null",
+                        lessonContext.getPageContext() != null ? lessonContext.getPageContext() : "general",
+                        lessonContext.getIsGlobal() != null ? lessonContext.getIsGlobal() : false);
             } catch (Exception e) {
                 return "{}";
             }
         }
-        return this.contextData;
+        return this.contextData != null ? this.contextData : "{}";
     }
 }
