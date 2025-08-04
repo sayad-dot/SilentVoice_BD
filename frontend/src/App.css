@@ -1,169 +1,75 @@
-
 /* Import new styles */
 @import './styles/auth.css';
 @import './styles/common.css';
 
+/* Global styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+  line-height: 1.6;
+  color: #2d3748;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
 /* App Container Updates */
+.App {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
 .App.authenticated {
   min-height: 100vh;
-  background: #f8f9fa;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 .App.authenticated .video-upload-container {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  padding: 32px;
-  margin-bottom: 24px;
+  border-radius: 20px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 40px;
+  margin: 20px;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Enhanced container styling */
+.main-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 /* Update existing video upload styles to work with authenticated layout */
 .video-upload-container .upload-header {
-  margin-bottom: 32px;
+  margin-bottom: 40px;
+  text-align: center;
 }
 
 .video-upload-container .upload-header h1 {
-  font-size: 28px;
+  font-size: 2.5rem;
   color: #2d3748;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .video-upload-container .upload-header p {
   color: #718096;
-  font-size: 16px;
+  font-size: 18px;
   margin: 0;
+  font-weight: 400;
 }
 
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-/* Add these styles to your existing App.css */
-
-.app-navigation {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin: 20px 0;
-  padding: 0 20px;
-}
-
-.nav-button {
-  padding: 12px 24px;
-  border: 2px solid #e0e0e0;
-  background: white;
-  border-radius: 25px;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  min-width: 180px;
-}
-
-.nav-button:hover {
-  border-color: #3498db;
-  background: #f8f9fa;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.2);
-}
-
-.nav-button.active {
-  background: linear-gradient(45deg, #3498db, #2980b9);
-  color: white;
-  border-color: #2980b9;
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
-}
-
-.nav-button.active:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
-}
-
-/* Responsive navigation */
-@media (max-width: 768px) {
-  .app-navigation {
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-  }
-  
-  .nav-button {
-    min-width: 200px;
-  }
-}
-/* Import new styles */
-@import './styles/auth.css';
-@import './styles/common.css';
-
-/* App Container Updates */
-.App.authenticated {
-  min-height: 100vh;
-  background: #f8f9fa;
-}
-
-.App.authenticated .video-upload-container {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  padding: 32px;
-  margin-bottom: 24px;
-}
-
-/* Update existing video upload styles to work with authenticated layout */
-.video-upload-container .upload-header {
-  margin-bottom: 32px;
-}
-
-.video-upload-container .upload-header h1 {
-  font-size: 28px;
-  color: #2d3748;
-  margin-bottom: 8px;
-}
-
-.video-upload-container .upload-header p {
-  color: #718096;
-  font-size: 16px;
-  margin: 0;
-}
-
-.App {
-  text-align: center;
-}
-
+/* App logo animation */
 .App-logo {
   height: 40vmin;
   pointer-events: none;
@@ -199,61 +105,64 @@
   }
 }
 
-/* App navigation styles */
+/* Enhanced App navigation styles */
 .app-navigation {
   display: flex;
   justify-content: center;
-  gap: 20px;
-  margin: 20px 0;
-  padding: 0 20px;
+  gap: 24px;
+  margin: 32px 0;
+  padding: 0 24px;
 }
 
 .nav-button {
-  padding: 12px 24px;
-  border: 2px solid #e0e0e0;
-  background: white;
-  border-radius: 25px;
+  padding: 16px 32px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50px;
   cursor: pointer;
   font-size: 16px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  min-width: 180px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 200px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .nav-button:hover {
-  border-color: #3498db;
-  background: #f8f9fa;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.2);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(102, 126, 234, 0.3);
 }
 
 .nav-button.active {
-  background: linear-gradient(45deg, #3498db, #2980b9);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  border-color: #2980b9;
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  border-color: transparent;
+  box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4), 0 4px 6px -2px rgba(102, 126, 234, 0.1);
 }
 
 .nav-button.active:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(52, 152, 219, 0.4);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 25px -5px rgba(102, 126, 234, 0.4), 0 10px 10px -5px rgba(102, 126, 234, 0.2);
 }
 
 /* Global Chatbot Toggle Button */
 .chatbot-toggle-button {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
+  bottom: 24px;
+  right: 24px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  background: linear-gradient(45deg, #3498db, #2980b9);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   color: white;
-  font-size: 24px;
+  font-size: 28px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
-  transition: all 0.3s ease;
+  box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4), 0 4px 6px -2px rgba(102, 126, 234, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 999;
   display: flex;
   align-items: center;
@@ -261,8 +170,8 @@
 }
 
 .chatbot-toggle-button:hover {
-  transform: scale(1.1);
-  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.6);
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(102, 126, 234, 0.5), 0 10px 10px -5px rgba(102, 126, 234, 0.2);
 }
 
 .chatbot-toggle-button:active {
@@ -272,50 +181,52 @@
 /* Global Chatbot Widget Enhancements */
 .chatbot-widget.global {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   z-index: 1000;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 20px;
+  overflow: hidden;
 }
 
 /* Minimized Chatbot */
 .chatbot-minimized {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: linear-gradient(45deg, #3498db, #2980b9);
-  border-radius: 30px;
-  padding: 12px 20px;
+  bottom: 24px;
+  right: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50px;
+  padding: 16px 24px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
-  transition: all 0.3s ease;
+  box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4), 0 4px 6px -2px rgba(102, 126, 234, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 999;
 }
 
 .chatbot-minimized:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.6);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 25px -5px rgba(102, 126, 234, 0.5), 0 10px 10px -5px rgba(102, 126, 234, 0.2);
 }
 
 .chatbot-minimized-content {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   color: white;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .chatbot-icon {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .chatbot-title {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .typing-dot {
   animation: pulse 1.5s infinite;
-  color: #f39c12;
+  color: #fbbf24;
 }
 
 @keyframes pulse {
@@ -328,17 +239,18 @@
   .app-navigation {
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 16px;
   }
 
   .nav-button {
-    min-width: 200px;
+    min-width: 250px;
+    padding: 14px 28px;
   }
 
   .chatbot-toggle-button {
-    width: 50px;
-    height: 50px;
-    font-size: 20px;
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
   }
 
   .chatbot-widget.global {
@@ -348,4 +260,64 @@
     right: 10px;
     left: 10px;
   }
+
+  .video-upload-container .upload-header h1 {
+    font-size: 2rem;
+  }
+}
+
+/* Enhanced card styling */
+.enhanced-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  padding: 32px;
+  margin: 20px 0;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.enhanced-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Button enhancements */
+.btn-primary-enhanced {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 16px 32px;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(102, 126, 234, 0.2), 0 2px 4px -1px rgba(102, 126, 234, 0.1);
+}
+
+.btn-primary-enhanced:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4), 0 4px 6px -2px rgba(102, 126, 234, 0.2);
+}
+
+.btn-primary-enhanced:active {
+  transform: translateY(0);
+}
+
+/* Loading animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
 }
