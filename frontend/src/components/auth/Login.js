@@ -1,18 +1,22 @@
+// components/auth/Login.js - UPDATED VERSION
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getValidationErrors } from '../../utils/validation';
 import AuthLayout from './AuthLayout';
 import LoadingSpinner from '../common/LoadingSpinner';
 import ErrorMessage from '../common/ErrorMessage';
-import { FaGoogle, FaFacebookF } from 'react-icons/fa';
+import GoogleLoginButton from './GoogleLoginButton';
+import { FaFacebookF } from 'react-icons/fa';
+
 const Login = ({ onSwitchToRegister }) => {
-  const { login, loading, error, clearError } = useAuth();
+  const { login, loginWithGoogle, loading, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -53,8 +57,47 @@ const Login = ({ onSwitchToRegister }) => {
     if (!result.success) {
       // Error is handled by AuthContext
       console.error('Login failed:', result.error);
+    } else {
+      // Handle remember me functionality if needed
+      if (rememberMe) {
+        localStorage.setItem('rememberMe', 'true');
+        localStorage.setItem('lastEmail', formData.email);
+      } else {
+        localStorage.removeItem('rememberMe');
+        localStorage.removeItem('lastEmail');
+      }
     }
   };
+
+  // 🔥 UPDATED: Better Google login handlers
+  const handleGoogleSuccess = async (user, token) => {
+    console.log('✅ Google login successful:', user.email);
+    // The loginWithGoogle is already called automatically by GoogleLoginButton
+    // Just handle any additional success logic here if needed
+    
+    // Optional: Handle remember me for Google login
+    if (rememberMe) {
+      localStorage.setItem('rememberMe', 'true');
+      localStorage.setItem('lastEmail', user.email);
+    }
+  };
+
+  const handleGoogleError = (errorMessage) => {
+    console.error('❌ Google login failed:', errorMessage);
+    // Error display is handled by AuthContext through the error state
+    // But you can add additional error handling here if needed
+  };
+
+  // Load remembered email on component mount
+  React.useEffect(() => {
+    const remembered = localStorage.getItem('rememberMe');
+    const lastEmail = localStorage.getItem('lastEmail');
+    
+    if (remembered === 'true' && lastEmail) {
+      setFormData(prev => ({ ...prev, email: lastEmail }));
+      setRememberMe(true);
+    }
+  }, []);
 
   return (
     <AuthLayout 
@@ -64,6 +107,7 @@ const Login = ({ onSwitchToRegister }) => {
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <ErrorMessage message={error} />}
         
+        {/* EMAIL */}
         <div className="form-group">
           <div className="input-container">
             <input
@@ -76,13 +120,12 @@ const Login = ({ onSwitchToRegister }) => {
               required
             />
             <label className="form-label">Email Address</label>
-            <div className="input-icon">
-              📧
-            </div>
+            <div className="input-icon">📧</div>
           </div>
           {formErrors.email && <span className="error-text">{formErrors.email}</span>}
         </div>
 
+        {/* PASSWORD */}
         <div className="form-group">
           <div className="input-container">
             <input
@@ -95,13 +138,12 @@ const Login = ({ onSwitchToRegister }) => {
               required
             />
             <label className="form-label">Password</label>
-            <div className="input-icon">
-              🔒
-            </div>
+            <div className="input-icon">🔒</div>
             <button
               type="button"
               className="password-toggle"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label="Toggle password visibility"
             >
               {showPassword ? '🙈' : '👁️'}
             </button>
@@ -109,21 +151,38 @@ const Login = ({ onSwitchToRegister }) => {
           {formErrors.password && <span className="error-text">{formErrors.password}</span>}
         </div>
 
+        {/* FORM OPTIONS - Updated */}
         <div className="form-options">
           <label className="checkbox-container">
-            <input type="checkbox" />
+            <input 
+              type="checkbox" 
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
             <span className="checkmark"></span>
             Remember me
           </label>
-          <a href="#" className="forgot-link">Forgot password?</a>
+          <button 
+            type="button" 
+            className="forgot-link"
+            onClick={() => {
+              // TODO: Implement forgot password functionality
+              console.log('Forgot password clicked');
+            }}
+          >
+            Forgot password?
+          </button>
         </div>
 
+        {/* SUBMIT BUTTON */}
         <button 
           type="submit" 
           className="auth-btn primary" 
           disabled={loading}
         >
-          {loading ? <LoadingSpinner size="small" /> : (
+          {loading ? (
+            <LoadingSpinner size="small" />
+          ) : (
             <>
               <span>Sign In</span>
               <div className="btn-icon">🚀</div>
@@ -131,24 +190,33 @@ const Login = ({ onSwitchToRegister }) => {
           )}
         </button>
 
+        {/* DIVIDER */}
         <div className="divider">
           <span>or continue with</span>
         </div>
 
-<div className="social-login">
-  <button type="button" className="social-btn google">
-    <FaGoogle className="social-icon" />
-  </button>
-  <button type="button" className="social-btn facebook">
-    <FaFacebookF className="social-icon" />
-  </button>
-</div>
+        {/* SOCIAL LOGIN - Updated */}
+        <div className="social-login">
+          <GoogleLoginButton 
+            mode="login"
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            disabled={loading}
+          />
+          {/* 
+          <button type="button" className="social-btn facebook" disabled>
+            <FaFacebookF className="social-icon" />
+          </button>
+          */}
+        </div>
       </form>
 
+      {/* FOOTER */}
       <div className="auth-footer">
         <p>
           Don't have an account?{' '}
           <button 
+            type="button"
             className="link-button" 
             onClick={onSwitchToRegister}
             disabled={loading}

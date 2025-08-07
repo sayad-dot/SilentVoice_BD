@@ -117,32 +117,31 @@
 .prediction-display h3 {
   margin-top: 0;
   margin-bottom: 20px;
-  color: #2d3748;
+  color: #ffffff !important;
   font-size: 20px;
   font-weight: 600;
   border-bottom: 3px solid transparent;
-  border-image: linear-gradient(135deg, #667eea 0%, #764ba2 100%) 1;
+  border-image: linear-gradient(135deg, #ffffff 0%, #ffffff 100%) 1 !important;
   padding-bottom: 12px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .prediction-text {
   font-size: 28px;
   font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ffffff !important;
   margin: 24px 0;
   padding: 20px;
-  background-color: rgba(102, 126, 234, 0.05);
+  background-color: rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid #ffffff !important;
   min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   border: 1px solid rgba(102, 126, 234, 0.1);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .confidence-display {
@@ -257,7 +256,6 @@
   color: #667eea;
 }
 
-/* Enhanced session info */
 .session-info {
   font-size: 13px;
   color: #718096;
@@ -299,7 +297,6 @@
   border-bottom: none;
 }
 
-/* Status indicators */
 .status-indicator {
   display: inline-block;
   width: 10px;
@@ -318,7 +315,6 @@
   box-shadow: 0 0 10px rgba(245, 101, 101, 0.5);
 }
 
-/* Loading states */
 .loading-overlay {
   position: absolute;
   top: 0;
@@ -347,7 +343,6 @@
   100% { transform: rotate(360deg); }
 }
 
-/* Responsive design */
 @media (max-width: 768px) {
   .webcam-content {
     grid-template-columns: 1fr;

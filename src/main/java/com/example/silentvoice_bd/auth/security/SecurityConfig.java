@@ -68,7 +68,7 @@ public class SecurityConfig {
                 // Authorization rules - ORDER MATTERS!
                 .authorizeHttpRequests(auth -> auth
                 // CRITICAL: Public authentication endpoints FIRST
-                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll() // This includes our new Google endpoints
                 .requestMatchers("/auth/**").permitAll()
                 // Public endpoints
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

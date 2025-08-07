@@ -957,3 +957,16 @@ html, body {
     color: rgba(255, 255, 255, 0.9);
   }
 }
+.google-btn-text {
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.social-btn.google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.social-btn.google:disabled .social-icon {
+  animation: none;
+}

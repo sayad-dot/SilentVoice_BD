@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import authService from '../services/authService';
+import googleAuthService from '../services/googleAuthService';
 import { getToken, removeToken } from '../utils/tokenStorage';
 
 const AuthContext = createContext();
@@ -30,17 +31,20 @@ export const AuthProvider = ({ children }) => {
             // Token is valid, extract user info
             setUser({
               email: payload.sub,
-              fullName: localStorage.getItem('userFullName') || payload.sub
+              fullName: localStorage.getItem('userFullName') || payload.sub,
+              profilePicture: localStorage.getItem('userProfilePicture') || null
             });
           } else {
             // Token expired
             removeToken();
             localStorage.removeItem('userFullName');
+            localStorage.removeItem('userProfilePicture');
           }
         } catch (err) {
           console.error('Token validation error:', err);
           removeToken();
           localStorage.removeItem('userFullName');
+          localStorage.removeItem('userProfilePicture');
         }
       }
       setLoading(false);
@@ -49,6 +53,7 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
+  // Existing traditional login
   const login = async (email, password) => {
     try {
       setError('');
@@ -58,7 +63,8 @@ export const AuthProvider = ({ children }) => {
 
       setUser({
         email: email,
-        fullName: response.fullName
+        fullName: response.fullName,
+        profilePicture: response.profilePicture || null
       });
 
       // Store user's full name for display
@@ -74,6 +80,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // NEW: Google Login
+  const loginWithGoogle = async (googleUserData) => {
+    try {
+      setError('');
+      setLoading(true);
+
+      console.log('🔐 Processing Google login in AuthContext...');
+      const response = await authService.googleLogin(googleUserData);
+
+      setUser({
+        email: googleUserData.email,
+        fullName: response.fullName,
+        profilePicture: response.profilePicture || null
+      });
+
+      console.log('✅ Google login successful in AuthContext');
+      return { success: true };
+    } catch (err) {
+      const errorMessage = err.message || 'Google login failed';
+      setError(errorMessage);
+      console.error('❌ Google login failed in AuthContext:', errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Existing traditional registration
   const register = async (userData) => {
     try {
       setError('');
@@ -90,10 +124,45 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  // NEW: Google Registration
+  const registerWithGoogle = async (googleUserData) => {
+    try {
+      setError('');
+      setLoading(true);
+
+      console.log('🔐 Processing Google registration in AuthContext...');
+      const response = await authService.googleRegister(googleUserData);
+
+      setUser({
+        email: googleUserData.email,
+        fullName: response.fullName,
+        profilePicture: response.profilePicture || null
+      });
+
+      console.log('✅ Google registration successful in AuthContext');
+      return { success: true };
+    } catch (err) {
+      const errorMessage = err.message || 'Google registration failed';
+      setError(errorMessage);
+      console.error('❌ Google registration failed in AuthContext:', errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Sign out from Google if signed in
+      await googleAuthService.signOut();
+    } catch (error) {
+      console.warn('Google sign out error:', error);
+    }
+
     authService.logout();
     setUser(null);
     localStorage.removeItem('userFullName');
+    localStorage.removeItem('userProfilePicture');
   };
 
   const clearError = () => setError('');
@@ -103,7 +172,9 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     login,
+    loginWithGoogle,
     register,
+    registerWithGoogle,
     logout,
     clearError,
     isAuthenticated: !!user
@@ -115,3 +186,4 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
