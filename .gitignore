@@ -267,3 +267,5 @@ dataset/
 pose_out.json
 *.log
 *.tmp
+
+frontend/.env/
