@@ -2,6 +2,9 @@ package com.example.silentvoice_bd.ai.services;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -24,10 +27,13 @@ import com.example.silentvoice_bd.model.ExtractedFrame;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class PythonAIIntegrationService {
 
     private static final Logger logger = LoggerFactory.getLogger(PythonAIIntegrationService.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${ai.python.executable:python3}")
     private String pythonExecutable;
@@ -50,80 +56,113 @@ public class PythonAIIntegrationService {
     @Value("${ai.processing.retry-attempts:3}")
     private int retryAttempts;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private volatile boolean modelReady = false;
+
+    /**
+     * Load and verify the model at startup so that /api/ai/status can return
+     * ready.
+     */
+    @PostConstruct
+    public void loadModelOnStartup() {
+        File modelFile = new File("./python-ai/models/bangla_lstm_enhanced.h5");
+        if (!modelFile.exists()) {
+            logger.error("❌ Model file not found: {}", modelFile.getAbsolutePath());
+            return;
+        }
+        try {
+            // Test with empty data to verify model loading
+            Map<String, Object> testData = new HashMap<>();
+            testData.put("mode", "test");
+            testData.put("data", "[]");
+
+            JsonNode result = executePythonScriptWithFile("sign_predictor.py", objectMapper.writeValueAsString(testData));
+            if (result.has("success") && result.get("success").asBoolean()) {
+                modelReady = true;
+                logger.info("✅ Model loaded and AI system is ready");
+            } else {
+                logger.warn("⚠️ Model load test returned no success flag");
+            }
+        } catch (Exception e) {
+            logger.error("❌ Failed to load model at startup", e);
+        }
+    }
+
+    /**
+     * Status endpoint: returns whether model is ready and system information.
+     */
+    public Map<String, Object> getStatus() {
+        Map<String, Object> response = new HashMap<>();
+        Map<String, Object> systemInfo = new HashMap<>();
+
+        systemInfo.put("scriptsPath", pythonScriptsPath);
+        systemInfo.put("pythonExecutable", pythonExecutable);
+        systemInfo.put("venvPythonPath", venvPythonPath);
+        systemInfo.put("timeout", timeoutSeconds);
+        systemInfo.put("frameBatchSize", frameBatchSize);
+        systemInfo.put("maxFramesPerVideo", maxFramesPerVideo);
+        systemInfo.put("retryAttempts", retryAttempts);
+        systemInfo.put("venvExists", new File(venvPythonPath).exists());
+        systemInfo.put("scriptsPathExists", new File(pythonScriptsPath).exists());
+        systemInfo.put("modelFileExists", new File("./python-ai/models/bangla_lstm_enhanced.h5").exists());
+
+        String status = modelReady ? "ready" : "not_ready";
+        String message = modelReady ? "AI system is ready" : "AI system is not available";
+
+        response.put("status", status);
+        response.put("message", message);
+        response.put("systemInfo", systemInfo);
+        response.put("timestamp", System.currentTimeMillis());
+
+        return response;
+    }
 
     public PredictionResponse processVideoFrames(List<ExtractedFrame> frames) {
         logger.info("🎬 Processing {} frames for AI analysis", frames.size());
-
         try {
             long startTime = System.currentTimeMillis();
 
-            // Step 1: Enhanced frame selection with motion-based prioritization
+            // Step 1: Enhanced frame selection
             List<String> framePaths = extractAndLimitFramePathsEnhanced(frames);
-
             if (framePaths.isEmpty()) {
                 logger.warn("❌ No valid frame paths found for processing");
                 return PredictionResponse.error("No valid frame paths found");
             }
 
-            logger.info("📁 Selected {} frames out of {} for processing", framePaths.size(), frames.size());
+            logger.info("📁 Selected {} frames out of {} for processing",
+                    framePaths.size(), frames.size());
 
-            // CRITICAL: Log frame processing details for debugging
-            logger.info("🎞️ Frame processing details:");
-            logger.info("   📊 Total frames available: {}", frames.size());
-            logger.info("   📂 Frames selected for processing: {}", framePaths.size());
-            logger.info("   🔧 Batch size: {}", frameBatchSize);
-            logger.info("   ⏱️ Max frames per video: {}", maxFramesPerVideo);
-
-            // Step 2: Process frames with enhanced quality validation
-            logger.info("🔄 Starting pose extraction with quality validation...");
+            // Step 2: Pose extraction
             JsonNode poseResult = extractPosesWithQualityValidation(framePaths);
-
             if (!poseResult.get("success").asBoolean()) {
-                String errorMsg = poseResult.has("error")
-                        ? poseResult.get("error").asText() : "Unknown pose extraction error";
-                logger.error("❌ Pose extraction failed: {}", errorMsg);
-                return PredictionResponse.error("Pose extraction failed: " + errorMsg);
+                String err = poseResult.has("error") ? poseResult.get("error").asText()
+                        : "Unknown pose extraction error";
+                logger.error("❌ Pose extraction failed: {}", err);
+                return PredictionResponse.error("Pose extraction failed: " + err);
             }
 
-            // CRITICAL: Log pose extraction results for debugging
-            logger.info("✅ Pose extraction successful:");
-            logger.info("   📊 Sequence length: {}", poseResult.get("sequence_length").asInt());
-            logger.info("   🔢 Feature dimension: {}", poseResult.get("feature_dimension").asInt());
-            logger.info("   🎯 Normalized flag: {}", poseResult.has("normalized") ? poseResult.get("normalized").asBoolean() : "unknown");
-            logger.info("   📈 Data quality score: {}", poseResult.has("quality_score") ? poseResult.get("quality_score").asDouble() : "unknown");
-
-            // Step 3: Predict sign language using LSTM
-            logger.info("🤖 Starting sign language prediction...");
+            // Step 3: Prediction
             JsonNode predictionResult = predictSignLanguageWithRetry(poseResult.get("pose_sequence"));
-
             if (!predictionResult.get("success").asBoolean()) {
-                String errorMsg = predictionResult.has("error")
-                        ? predictionResult.get("error").asText() : "Unknown prediction error";
-                logger.error("❌ Sign prediction failed: {}", errorMsg);
-                return PredictionResponse.error("Prediction failed: " + errorMsg);
+                String err = predictionResult.has("error") ? predictionResult.get("error").asText()
+                        : "Unknown prediction error";
+                logger.error("❌ Sign prediction failed: {}", err);
+                return PredictionResponse.error("Prediction failed: " + err);
             }
 
-            // Step 4: Create response with comprehensive logging
+            // Step 4: Build response
             int processingTime = (int) (System.currentTimeMillis() - startTime);
-
             PredictionResponse response = PredictionResponse.success(
                     predictionResult.get("predicted_text").asText(),
                     predictionResult.get("confidence").asDouble(),
                     processingTime,
                     null
             );
+            response.setModelVersion(predictionResult.get("model_version").asText("bangla_lstm_enhanced_v1"));
 
-            response.setModelVersion(predictionResult.get("model_version").asText("bangla_lstm_v1"));
+            logger.info("🎯 Prediction: '{}', Confidence: {:.2f}%, Time: {}ms",
+                    response.getPredictedText(), response.getConfidence() * 100, processingTime);
 
-            // CRITICAL: Log final prediction results for debugging
-            logger.info("🎯 Final AI Processing Results:");
-            logger.info("   📝 Predicted text: '{}'", response.getPredictedText());
-            logger.info("   📊 Confidence: {:.2f}%", response.getConfidence() * 100);
-            logger.info("   ⏱️ Processing time: {} ms", processingTime);
-            logger.info("   🏷️ Model version: {}", response.getModelVersion());
-
-            // Add comprehensive processing info for debugging
+            // Add processing info
             Map<String, Object> processingInfo = new HashMap<>();
             processingInfo.put("totalFrames", frames.size());
             processingInfo.put("processedFrames", framePaths.size());
@@ -132,37 +171,20 @@ public class PythonAIIntegrationService {
             processingInfo.put("poseExtractionSuccess", true);
             processingInfo.put("sequenceLength", poseResult.get("sequence_length").asInt());
             processingInfo.put("featureDimension", poseResult.get("feature_dimension").asInt());
-            processingInfo.put("qualityScore", poseResult.has("quality_score") ? poseResult.get("quality_score").asDouble() : 0.0);
+            processingInfo.put("qualityScore", poseResult.get("quality_score").asDouble());
             processingInfo.put("frameSelectionMethod", "motion-based");
-
             if (predictionResult.has("processing_info")) {
-                processingInfo.putAll(objectMapper.convertValue(
-                        predictionResult.get("processing_info"), Map.class));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> predProcessingInfo = objectMapper.convertValue(
+                        predictionResult.get("processing_info"), Map.class);
+                processingInfo.putAll(predProcessingInfo);
             }
-
             response.setProcessingInfo(processingInfo);
-
-            // CRITICAL: Enhanced confidence analysis
-            double confidence = response.getConfidence();
-            if (confidence < 0.1) {
-                logger.error("❌ CRITICAL: Very low confidence ({:.2f}%) detected!", confidence * 100);
-                logger.error("   🔧 Possible causes: normalization issues, poor pose detection, or model mismatch");
-                logger.error("   📊 Processing info: {}", processingInfo);
-            } else if (confidence < 0.3) {
-                logger.warn("⚠️ Low confidence ({:.2f}%) - investigate data quality", confidence * 100);
-            } else if (confidence < 0.7) {
-                logger.info("📊 Medium confidence ({:.2f}%) - acceptable but could be improved", confidence * 100);
-            } else {
-                logger.info("✅ High confidence ({:.2f}%) - excellent prediction quality", confidence * 100);
-            }
-
-            logger.info("✅ AI processing completed successfully. Prediction: '{}', Confidence: {:.2f}%, Time: {}ms",
-                    response.getPredictedText(), response.getConfidence() * 100, processingTime);
 
             return response;
 
         } catch (Exception e) {
-            logger.error("💥 AI processing failed with exception", e);
+            logger.error("💥 AI processing failed", e);
             return PredictionResponse.error("Processing failed: " + e.getMessage());
         }
     }
@@ -208,7 +230,6 @@ public class PythonAIIntegrationService {
             validFrames.sort((f1, f2) -> {
                 // Primary: Motion score (higher is better)
                 if (f1.getMotionScore() != null && f2.getMotionScore() != null) {
-                    // FIXED: Use BigDecimal's compareTo method instead of Double.compare
                     int motionCompare = f2.getMotionScore().compareTo(f1.getMotionScore());
                     if (motionCompare != 0) {
                         return motionCompare;
@@ -282,11 +303,14 @@ public class PythonAIIntegrationService {
 
             logger.info("🔄 Processing batch {}/{}: {} frames", batchNumber, totalBatches, batchPaths.size());
 
-            String framePathsJson = objectMapper.writeValueAsString(batchPaths);
+            // Create input data for file-based processing
+            Map<String, Object> inputData = new HashMap<>();
+            inputData.put("mode", "frames");
+            inputData.put("data", batchPaths);
 
             // CRITICAL: Log Python script execution for debugging
             logger.debug("🐍 Executing pose_extractor.py for batch {}", batchNumber);
-            JsonNode batchResult = executePythonScript("pose_extractor.py", "frames", framePathsJson);
+            JsonNode batchResult = executePythonScriptWithFile("pose_extractor.py", objectMapper.writeValueAsString(inputData));
 
             if (batchResult.get("success").asBoolean() && batchResult.has("pose_sequence")) {
                 JsonNode poseSequence = batchResult.get("pose_sequence");
@@ -296,6 +320,7 @@ public class PythonAIIntegrationService {
 
                 // Enhanced quality validation
                 for (JsonNode frame : poseSequence) {
+                    @SuppressWarnings("unchecked")
                     List<Object> frameData = objectMapper.convertValue(frame, List.class);
                     totalSequences++;
 
@@ -319,7 +344,12 @@ public class PythonAIIntegrationService {
 
             // Small delay between batches to prevent system overload
             if (i + frameBatchSize < framePaths.size()) {
-                Thread.sleep(100);
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("Processing interrupted", e);
+                }
             }
         }
 
@@ -389,18 +419,22 @@ public class PythonAIIntegrationService {
 
     private JsonNode predictSignLanguageWithRetry(JsonNode poseSequence) throws Exception {
         logger.info("🤖 Starting sign language prediction with retry mechanism...");
-        Exception lastException = null;
+        Exception lastException = new Exception("No attempts made");
 
         for (int attempt = 1; attempt <= retryAttempts; attempt++) {
             try {
                 logger.info("🔄 Sign prediction attempt {} of {}", attempt, retryAttempts);
-                String poseSequenceJson = objectMapper.writeValueAsString(poseSequence);
+
+                // Create input data for file-based processing
+                Map<String, Object> inputData = new HashMap<>();
+                inputData.put("mode", "predict");
+                inputData.put("data", poseSequence);
 
                 // CRITICAL: Log prediction input for debugging
                 logger.debug("📊 Prediction input: {} sequences",
                         poseSequence.isArray() ? poseSequence.size() : "unknown");
 
-                JsonNode result = executePythonScript("sign_predictor.py", poseSequenceJson);
+                JsonNode result = executePythonScriptWithFile("sign_predictor.py", objectMapper.writeValueAsString(inputData));
 
                 logger.info("✅ Sign prediction attempt {} successful", attempt);
                 return result;
@@ -412,7 +446,12 @@ public class PythonAIIntegrationService {
                 if (attempt < retryAttempts) {
                     int sleepTime = 1000 * attempt;
                     logger.info("⏳ Waiting {} ms before retry attempt {}", sleepTime, attempt + 1);
-                    Thread.sleep(sleepTime); // Exponential backoff
+                    try {
+                        Thread.sleep(sleepTime); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new Exception("Retry interrupted", ie);
+                    }
                 }
             }
         }
@@ -421,82 +460,118 @@ public class PythonAIIntegrationService {
         throw lastException;
     }
 
-    private JsonNode executePythonScript(String scriptName, String... args) throws Exception {
+    /**
+     * FILE-BASED PYTHON SCRIPT EXECUTION This replaces the old
+     * executePythonScript method to avoid "argument list too long" errors
+     */
+    private JsonNode executePythonScriptWithFile(String scriptName, String jsonData) throws Exception {
         // Use virtual environment Python if available
         String pythonExec = new File(venvPythonPath).exists() ? venvPythonPath : pythonExecutable;
 
-        // Build command
-        CommandLine cmdLine = new CommandLine(pythonExec);
-        cmdLine.addArgument(pythonScriptsPath + scriptName);
-
-        for (String arg : args) {
-            cmdLine.addArgument(arg, false);
-        }
-
-        // CRITICAL: Log Python execution for debugging
-        logger.debug("🐍 Executing Python script: {}", scriptName);
-        logger.debug("   Command: {}", cmdLine.toString());
-        logger.debug("   Python executable: {}", pythonExec);
-        logger.debug("   Scripts path: {}", pythonScriptsPath);
-        logger.debug("   Arguments count: {}", args.length);
-
-        // Setup executor with increased timeout
-        DefaultExecutor executor = new DefaultExecutor();
-        executor.setExitValue(0);
-
-        // Extended timeout for heavy processing
-        ExecuteWatchdog watchdog = new ExecuteWatchdog(timeoutSeconds * 1000L);
-        executor.setWatchdog(watchdog);
-
-        // Capture output
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
-        PumpStreamHandler streamHandler = new PumpStreamHandler(outputStream, errorStream);
-        executor.setStreamHandler(streamHandler);
-
-        // Set environment variables to suppress TensorFlow warnings
-        Map<String, String> environment = new HashMap<>();
-        environment.put("TF_CPP_MIN_LOG_LEVEL", "2");
-        environment.put("TF_ENABLE_ONEDNN_OPTS", "0");
-        environment.put("PYTHONUNBUFFERED", "1");
+        File tempInputFile = null;
+        File tempOutputFile = null;
 
         try {
+            // Create temporary input file
+            tempInputFile = File.createTempFile("silentvoice_input_", ".json");
+            tempInputFile.deleteOnExit();
+
+            // Create temporary output file
+            tempOutputFile = File.createTempFile("silentvoice_output_", ".json");
+            tempOutputFile.deleteOnExit();
+
+            // Write input data to file
+            try (FileWriter writer = new FileWriter(tempInputFile, StandardCharsets.UTF_8)) {
+                writer.write(jsonData);
+            }
+
+            // Build command with file paths
+            CommandLine cmdLine = new CommandLine(pythonExec);
+            cmdLine.addArgument(pythonScriptsPath + scriptName);
+            cmdLine.addArgument(tempInputFile.getAbsolutePath());
+            cmdLine.addArgument(tempOutputFile.getAbsolutePath());
+
+            // CRITICAL: Log Python execution for debugging
+            logger.debug("🐍 Executing Python script with file-based I/O: {}", scriptName);
+            logger.debug("   Command: {}", cmdLine.toString());
+            logger.debug("   Python executable: {}", pythonExec);
+            logger.debug("   Scripts path: {}", pythonScriptsPath);
+            logger.debug("   Input file: {}", tempInputFile.getAbsolutePath());
+            logger.debug("   Output file: {}", tempOutputFile.getAbsolutePath());
+            logger.debug("   Input data size: {} bytes", jsonData.getBytes(StandardCharsets.UTF_8).length);
+
+            // Setup executor with timeout
+            DefaultExecutor executor = new DefaultExecutor();
+            executor.setExitValue(0);
+            ExecuteWatchdog watchdog = new ExecuteWatchdog(timeoutSeconds * 1000L);
+            executor.setWatchdog(watchdog);
+
+            // Capture output and errors
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            ByteArrayOutputStream errorStream = new ByteArrayOutputStream();
+            PumpStreamHandler streamHandler = new PumpStreamHandler(outputStream, errorStream);
+            executor.setStreamHandler(streamHandler);
+
+            // Set environment variables
+            Map<String, String> environment = new HashMap<>();
+            environment.put("TF_CPP_MIN_LOG_LEVEL", "2");
+            environment.put("TF_ENABLE_ONEDNN_OPTS", "0");
+            environment.put("PYTHONUNBUFFERED", "1");
+
+            // Execute script
             long scriptStartTime = System.currentTimeMillis();
             int exitCode = executor.execute(cmdLine, environment);
             long scriptExecutionTime = System.currentTimeMillis() - scriptStartTime;
 
-            String output = outputStream.toString().trim();
+            String processOutput = outputStream.toString().trim();
             String errorOutput = errorStream.toString().trim();
 
-            // CRITICAL: Log Python script execution results
+            // Log execution results
             logger.debug("✅ Python script '{}' completed in {} ms", scriptName, scriptExecutionTime);
             logger.debug("   Exit code: {}", exitCode);
-            logger.debug("   Output length: {} characters", output.length());
-
+            if (!processOutput.isEmpty()) {
+                logger.debug("   Process output: {}", processOutput);
+            }
             if (!errorOutput.isEmpty()) {
                 logger.debug("   Error output: {}", errorOutput);
             }
 
+            // Check for execution errors
             if (exitCode != 0) {
                 logger.error("❌ Python script '{}' failed with exit code: {}", scriptName, exitCode);
                 if (!errorOutput.isEmpty()) {
                     logger.error("   Python error output: {}", errorOutput);
                 }
-                throw new Exception("Python script failed with exit code: " + exitCode);
+                throw new Exception("Python script failed with exit code: " + exitCode + " - " + errorOutput);
             }
 
-            if (output.isEmpty()) {
-                logger.error("❌ Python script '{}' produced no output", scriptName);
+            // Read result from output file
+            if (!tempOutputFile.exists() || tempOutputFile.length() == 0) {
+                logger.error("❌ Python script '{}' did not create output file or file is empty", scriptName);
                 if (!errorOutput.isEmpty()) {
                     logger.error("   Python error output: {}", errorOutput);
                 }
-                throw new Exception("Python script produced no output");
+                throw new Exception("Python script did not produce output file");
             }
 
-            logger.debug("✅ Python script '{}' executed successfully", scriptName);
-            JsonNode result = objectMapper.readTree(output);
+            // Read and parse the JSON output
+            String outputContent;
+            try {
+                outputContent = new String(Files.readAllBytes(tempOutputFile.toPath()), StandardCharsets.UTF_8).trim();
+            } catch (Exception e) {
+                throw new Exception("Failed to read output file: " + e.getMessage());
+            }
 
-            // CRITICAL: Log Python script results for debugging
+            if (outputContent.isEmpty()) {
+                throw new Exception("Python script produced empty output file");
+            }
+
+            logger.debug("✅ Python script '{}' file-based execution successful", scriptName);
+            logger.debug("   Output file size: {} bytes", outputContent.getBytes(StandardCharsets.UTF_8).length);
+
+            JsonNode result = objectMapper.readTree(outputContent);
+
+            // Log Python script results for debugging
             if (result.has("success")) {
                 logger.debug("   Script success: {}", result.get("success").asBoolean());
             }
@@ -510,43 +585,42 @@ public class PythonAIIntegrationService {
             return result;
 
         } catch (ExecuteException e) {
-            String errorOutput = errorStream.toString();
-
             if (e.getExitValue() == 143) {
                 logger.error("❌ Python script '{}' timed out after {} seconds", scriptName, timeoutSeconds);
                 throw new Exception("Python script timed out. Consider reducing frame count or increasing timeout.");
             }
 
             logger.error("❌ Failed to execute Python script '{}': Exit code {}", scriptName, e.getExitValue());
-            if (!errorOutput.isEmpty()) {
-                logger.error("   Python error output: {}", errorOutput);
-            }
             throw new Exception("Failed to execute Python script '" + scriptName + "': " + e.getMessage());
+
+        } catch (Exception e) {
+            logger.error("❌ Unexpected error executing Python script '{}': {}", scriptName, e.getMessage());
+            throw new Exception("Unexpected error executing Python script: " + e.getMessage());
+
+        } finally {
+            // Cleanup temporary files
+            if (tempInputFile != null && tempInputFile.exists()) {
+                try {
+                    tempInputFile.delete();
+                    logger.debug("🗑️ Cleaned up input file: {}", tempInputFile.getName());
+                } catch (Exception e) {
+                    logger.warn("⚠️ Failed to delete temporary input file: {}", e.getMessage());
+                }
+            }
+
+            if (tempOutputFile != null && tempOutputFile.exists()) {
+                try {
+                    tempOutputFile.delete();
+                    logger.debug("🗑️ Cleaned up output file: {}", tempOutputFile.getName());
+                } catch (Exception e) {
+                    logger.warn("⚠️ Failed to delete temporary output file: {}", e.getMessage());
+                }
+            }
         }
     }
 
     public boolean isAISystemReady() {
-        logger.info("🔧 Checking AI system readiness...");
-
-        try {
-            // Quick readiness test with empty input
-            JsonNode testResult = executePythonScript("sign_predictor.py", "[]");
-            boolean isReady = testResult != null && testResult.has("success");
-
-            logger.info("🔧 AI system readiness check: {}", isReady ? "READY" : "NOT READY");
-
-            if (isReady) {
-                logger.info("✅ AI system is ready for processing");
-            } else {
-                logger.warn("❌ AI system is not ready - check Python environment and model files");
-            }
-
-            return isReady;
-
-        } catch (Exception e) {
-            logger.error("❌ AI system readiness check failed", e);
-            return false;
-        }
+        return modelReady;
     }
 
     public Map<String, Object> getSystemInfo() {

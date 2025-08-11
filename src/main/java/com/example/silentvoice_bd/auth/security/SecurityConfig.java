@@ -57,52 +57,46 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF (we're a stateless REST API)
+                // Disable CSRF (stateless API)
                 .csrf(csrf -> csrf.disable())
-                // Enable CORS with our configuration
+                // Enable CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Do not create sessions; every request must carry a token
-                .sessionManagement(session
-                        -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                // Authorization rules - ORDER MATTERS!
+                // Stateless session - every request needs token
+                .sessionManagement(sm
+                        -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Authorization rules (order matters)
                 .authorizeHttpRequests(auth -> auth
-                // CRITICAL: Public authentication endpoints FIRST
-                .requestMatchers("/api/auth/**").permitAll() // This includes our new Google endpoints
+                // Public authentication endpoints
+                .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/auth/**").permitAll()
-                // Public endpoints
+                // Allow preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // Video endpoints - streaming and download allowed, others require auth
+                // Allow AI status without auth
+                .requestMatchers("/api/ai/status").permitAll()
+                // Secure all other AI endpoints
+                .requestMatchers("/api/ai/**").authenticated()
+                // Video endpoints
                 .requestMatchers(HttpMethod.POST, "/api/videos/upload").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/info").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/status").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/videos/**").authenticated()
-                // Allow streaming and download (handled by controller token validation)
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/stream").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/download").permitAll()
-                // Audio endpoints require authentication
-                .requestMatchers(HttpMethod.GET, "/api/audio/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/audio/**").authenticated()
-                .requestMatchers(HttpMethod.DELETE, "/api/audio/**").authenticated()
-                // AI endpoints require authentication
-                .requestMatchers("/api/ai/**").authenticated()
-                // Allow media endpoints for BdSLW-60 videos
+                // Audio endpoints
+                .requestMatchers("/api/audio/**").authenticated()
+                // Media and WebSocket
                 .requestMatchers("/api/media/**").permitAll()
-                // Learning endpoints require authentication
-                .requestMatchers("/api/learning/**").authenticated()
-                // Allow all SockJS/WebSocket handshake traffic
                 .requestMatchers("/ws/**").permitAll()
                 // Swagger / OpenAPI
                 .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**")
                 .permitAll()
-                // Everything else requires a valid JWT
+                // All other requests require authentication
                 .anyRequest().authenticated()
                 )
-                // Plug in our JWT filter before Spring's username/password filter
+                // Add JWT filter
                 .addFilterBefore(jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class)
-                // And use our DAO auth provider
                 .authenticationProvider(daoAuthenticationProvider());
 
         return http.build();
@@ -115,25 +109,15 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-
-        // Use specific origins with credentials (recommended approach)
         config.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
-
-        // Allow all HTTP methods (GET, POST, etc)
         config.setAllowedMethods(Arrays.asList(
                 "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
-
-        // Allow all headers (Authorization, Content-Type, etc)
         config.setAllowedHeaders(Arrays.asList("*"));
-
-        // Allow cookies / auth headers (needed for JWT tokens)
         config.setAllowCredentials(true);
-
-        // Cache preflight response for 1 hour
         config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source
+                = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }
