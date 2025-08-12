@@ -1,7 +1,10 @@
 package com.example.silentvoice_bd.ai.services;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,26 +40,46 @@ public class TextToSpeechService {
             String audioFilename = "prediction_" + predictionId + ".wav";
             String audioFilePath = audioDir.resolve(audioFilename).toString();
 
-            // Execute Python TTS script
+            // Execute Python TTS script with proper timeout handling
             ProcessBuilder processBuilder = new ProcessBuilder(
                     pythonExecutable,
                     ttsScriptPath,
                     banglaText,
                     audioFilePath
             );
-
             processBuilder.directory(new File("."));
             processBuilder.redirectErrorStream(true);
 
             Process process = processBuilder.start();
-            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
 
-            if (finished && process.exitValue() == 0 && Files.exists(Paths.get(audioFilePath))) {
+            // CRITICAL FIX: Always use waitFor() before checking exit value
+            boolean finished = process.waitFor(60, TimeUnit.SECONDS); // Increased timeout
+
+            if (!finished) {
+                logger.error("TTS process timed out after 60 seconds for text: '{}'", banglaText);
+                process.destroyForcibly(); // Force kill the process
+                return null;
+            }
+
+            int exitCode = process.exitValue();
+
+            // Enhanced error logging
+            if (exitCode == 0 && Files.exists(Paths.get(audioFilePath))) {
                 logger.info("Successfully generated speech for text: '{}' -> {}", banglaText, audioFilePath);
                 return audioFilePath;
             } else {
-                logger.error("TTS generation failed. Exit code: {}, Finished: {}",
-                        process.exitValue(), finished);
+                logger.error("TTS generation failed. Exit code: {}, Audio file exists: {}",
+                        exitCode, Files.exists(Paths.get(audioFilePath)));
+
+                // Capture process output for debugging
+                try (InputStream inputStream = process.getInputStream(); BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                    String line;
+                    StringBuilder output = new StringBuilder();
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
+                    }
+                    logger.error("Python TTS script output: {}", output.toString());
+                }
                 return null;
             }
 
