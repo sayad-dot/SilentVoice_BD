@@ -59,6 +59,7 @@ public class LiveProcessingService {
                 return false; // Buffer full
             }
             frames.add(frameData);
+            logger.debug("📹 Added frame {}/30 to session {}", frames.size(), sessionId);
             return frames.size() == 30; // Return true when sequence complete
         }
 
@@ -83,10 +84,7 @@ public class LiveProcessingService {
 
     public String initializeLiveSession(String userId) {
         String sessionId = UUID.randomUUID().toString();
-
-        // Initialize frame buffer for this session
         sessionBuffers.put(sessionId, new SessionFrameBuffer(sessionId));
-
         logger.info("🎬 Initialized live session {} for user {}", sessionId, userId);
         return sessionId;
     }
@@ -108,15 +106,12 @@ public class LiveProcessingService {
 
             // Add frame to buffer
             boolean sequenceComplete = buffer.addFrame(frameDataBase64);
-
             logger.debug("📹 Frame {}/30 added to session {}", buffer.getFrameCount(), sessionId);
 
             if (sequenceComplete) {
                 logger.info("✅ 30-frame sequence complete for session {}", sessionId);
-
                 // Get frames and clear buffer
                 List<String> frames = buffer.getFramesAndClear();
-
                 // Process the complete sequence
                 processFrameSequence(sessionId, frames, callback);
             } else {
@@ -185,7 +180,6 @@ public class LiveProcessingService {
             String frameData = frames.get(i);
             String base64Data = frameData.substring(frameData.indexOf(",") + 1);
             byte[] imageBytes = Base64.getDecoder().decode(base64Data);
-
             String framePath = sequencePath + "/frame_" + String.format("%03d", i) + ".jpg";
             Files.write(Paths.get(framePath), imageBytes);
         }
@@ -194,10 +188,9 @@ public class LiveProcessingService {
         return sequencePath;
     }
 
-    // Updated method with improved error handling and JSON validation
     private Map<String, Object> callPythonSequenceProcessor(String sequencePath, String sessionId) throws Exception {
         CommandLine cmdLine = new CommandLine(pythonVenv);
-        cmdLine.addArgument(scriptsPath + "live_sequence_processor.py");
+        cmdLine.addArgument(scriptsPath + "enhanced_realtime_processor_fixed.py");  // Use enhanced processor
         cmdLine.addArgument("--sequence_path");
         cmdLine.addArgument(sequencePath);
         cmdLine.addArgument("--session_id");
@@ -211,43 +204,55 @@ public class LiveProcessingService {
         PumpStreamHandler streamHandler = new PumpStreamHandler(outputStream, errorStream);
         executor.setStreamHandler(streamHandler);
 
-        // Set execution timeout to prevent hanging
-        ExecuteWatchdog watchdog = new ExecuteWatchdog(60000); // 60 seconds max
+        // Slightly longer timeout for enhanced processing
+        ExecuteWatchdog watchdog = new ExecuteWatchdog(30000); // 30 seconds
         executor.setWatchdog(watchdog);
 
         try {
+            long startTime = System.currentTimeMillis();
+            logger.info("🤖 Starting enhanced processor for session: {}", sessionId);
+
             int exitValue = executor.execute(cmdLine);
+            long duration = System.currentTimeMillis() - startTime;
 
             String output = outputStream.toString().trim();
             String errorOutput = errorStream.toString();
 
-            // Log Python stderr output (contains debug info)
+            logger.info("🤖 Enhanced processor completed in {}ms", duration);
+
             if (!errorOutput.isEmpty()) {
-                logger.debug("🐍 Python stderr: {}", errorOutput);
+                logger.info("🐍 Enhanced processor log: {}", errorOutput);
             }
 
-            if (exitValue == 0) {
-                logger.debug("🐍 Python JSON output: {}", output);
+            if (exitValue == 0 && !output.isEmpty()) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> result = objectMapper.readValue(output, Map.class);
 
-                // Validate that output is valid JSON
-                if (output.isEmpty()) {
-                    throw new RuntimeException("Python script produced no output");
+                    // Log the actual prediction
+                    String prediction = result.get("prediction").toString();
+                    Object confidence = result.get("confidence");
+
+                    logger.info("✅ Enhanced prediction successful for session: {} - '{}' ({})",
+                            sessionId, prediction, confidence);
+
+                    return result;
+
+                } catch (Exception parseError) {
+                    logger.error("❌ Failed to parse enhanced processor output: {}", parseError.getMessage());
+                    throw new RuntimeException("Failed to parse enhanced processor output");
                 }
-
-                if (!output.startsWith("{") && !output.startsWith("[")) {
-                    throw new RuntimeException("Python script output is not valid JSON: " + output.substring(0, Math.min(100, output.length())));
-                }
-
-                return objectMapper.readValue(output, Map.class);
             } else {
-                logger.error("🐍 Python script error (exit {}): {}", exitValue, errorOutput);
-                throw new RuntimeException("Python script execution failed: " + errorOutput);
+                logger.error("🤖 Enhanced processor failed (exit {}): {}", exitValue, errorOutput);
+                throw new RuntimeException("Enhanced processor execution failed: " + errorOutput);
             }
+
         } catch (ExecuteException e) {
             if (watchdog.killedProcess()) {
-                throw new RuntimeException("Python script execution timed out after 60 seconds");
+                logger.error("⏰ Enhanced processor timed out for session: {}", sessionId);
+                throw new RuntimeException("Enhanced processor execution timed out");
             } else {
-                throw new RuntimeException("Python script execution failed with exit code: " + e.getExitValue());
+                throw new RuntimeException("Enhanced processor execution failed with exit code: " + e.getExitValue());
             }
         }
     }
@@ -259,7 +264,6 @@ public class LiveProcessingService {
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);
-
             logger.debug("🗑️ Cleaned up sequence: {}", sequencePath);
         } catch (IOException e) {
             logger.warn("⚠️ Failed to cleanup sequence: {}", sequencePath, e);
@@ -275,7 +279,6 @@ public class LiveProcessingService {
 
             // Also cleanup any remaining temp files for this session
             cleanupSessionTempFiles(sessionId);
-
         } catch (Exception e) {
             logger.error("❌ Error cleaning up session {}", sessionId, e);
         }
@@ -323,20 +326,16 @@ public class LiveProcessingService {
      */
     public void cleanupInactiveSessions(long inactiveThresholdMs) {
         long currentTime = System.currentTimeMillis();
-
         sessionBuffers.entrySet().removeIf(entry -> {
             SessionFrameBuffer buffer = entry.getValue();
             boolean isInactive = (currentTime - buffer.getCreatedAt()) > inactiveThresholdMs;
-
             if (isInactive) {
                 logger.info("🧹 Removing inactive session {} (inactive for {} ms)",
                         entry.getKey(),
                         currentTime - buffer.getCreatedAt());
-
                 // Cleanup temp files for inactive session
                 cleanupSessionTempFiles(entry.getKey());
             }
-
             return isInactive;
         });
     }
