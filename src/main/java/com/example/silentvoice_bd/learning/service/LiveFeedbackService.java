@@ -1,28 +1,35 @@
 package com.example.silentvoice_bd.learning.service;
 
-import com.example.silentvoice_bd.learning.dto.FeedbackRequest;
-import com.example.silentvoice_bd.learning.dto.FeedbackResponse;
-import com.example.silentvoice_bd.learning.model.FeedbackSession;
-import com.example.silentvoice_bd.learning.repository.FeedbackSessionRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import com.example.silentvoice_bd.learning.dto.FeedbackRequest;
+import com.example.silentvoice_bd.learning.dto.FeedbackResponse;
+import com.example.silentvoice_bd.learning.model.FeedbackSession;
+import com.example.silentvoice_bd.learning.repository.FeedbackSessionRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class LiveFeedbackService {
+
+    private static final Logger logger = LoggerFactory.getLogger(LiveFeedbackService.class);
 
     @Autowired
     private FeedbackSessionRepository feedbackSessionRepository;
@@ -38,7 +45,6 @@ public class LiveFeedbackService {
 
     public FeedbackResponse analyzePoseData(FeedbackRequest request, UUID userId) {
         try {
-            // Send pose data to Python AI service for analysis
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -50,12 +56,15 @@ public class LiveFeedbackService {
 
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-            ResponseEntity<Map<String, Object>> response = restTemplate.postForEntity(
-                    pythonAiUrl + "/analyze_pose", entity,
-                    (Class<Map<String, Object>>) (Class<?>) Map.class);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    pythonAiUrl + "/analyze_pose",
+                    HttpMethod.POST,
+                    entity,
+                    new ParameterizedTypeReference<>() {
+            }
+            );
 
             Map<String, Object> result = response.getBody();
-
             if (result == null) {
                 return createFallbackResponse("No response from AI service");
             }
@@ -65,7 +74,6 @@ public class LiveFeedbackService {
             Boolean isCorrect = (Boolean) result.get("is_correct");
             String improvementTips = (String) result.get("improvement_tips");
 
-            // Save feedback session
             try {
                 FeedbackSession session = new FeedbackSession();
                 session.setUserId(userId);
@@ -78,11 +86,9 @@ public class LiveFeedbackService {
 
                 feedbackSessionRepository.save(session);
             } catch (JsonProcessingException e) {
-                System.err.println("Error serializing pose data: " + e.getMessage());
-                // Continue without saving pose data
+                logger.error("Error serializing pose data", e);
             }
 
-            // Create response
             FeedbackResponse feedbackResponse = new FeedbackResponse();
             feedbackResponse.setConfidenceScore(confidenceScore);
             feedbackResponse.setFeedbackText(feedbackText);
@@ -94,19 +100,18 @@ public class LiveFeedbackService {
             return feedbackResponse;
 
         } catch (RestClientException e) {
-            System.err.println("Error connecting to Python AI service: " + e.getMessage());
+            logger.error("Error connecting to Python AI service", e);
             return createFallbackResponse("AI service temporarily unavailable. Please check your pose and try again.");
         } catch (Exception e) {
-            System.err.println("Unexpected error in pose analysis: " + e.getMessage());
+            logger.error("Unexpected error in pose analysis", e);
             return createFallbackResponse("Unable to analyze pose. Please ensure your hands are clearly visible.");
         }
     }
 
     public void startFeedbackSession(Long lessonId, UUID userId) {
-        String sessionKey = userId.toString() + "_" + lessonId;
+        String sessionKey = userId + "_" + lessonId;
         activeSessions.put(sessionKey, LocalDateTime.now());
 
-        // Optional: Initialize session in database
         FeedbackSession session = new FeedbackSession();
         session.setUserId(userId);
         session.setLessonId(lessonId);
@@ -118,14 +123,32 @@ public class LiveFeedbackService {
         feedbackSessionRepository.save(session);
     }
 
+    public void resetFeedbackSession(Long lessonId, UUID userId) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<String> entity = new HttpEntity<>("{}", headers);
+
+            restTemplate.postForEntity(
+                    pythonAiUrl + "/reset_session",
+                    entity,
+                    String.class
+            );
+
+            logger.info("Feedback session reset for user: {}", userId);
+        } catch (Exception e) {
+            logger.error("Error resetting feedback session", e);
+        }
+    }
+
     public void endFeedbackSession(Long lessonId, UUID userId) {
-        String sessionKey = userId.toString() + "_" + lessonId;
+        String sessionKey = userId + "_" + lessonId;
         LocalDateTime startTime = activeSessions.remove(sessionKey);
 
         if (startTime != null) {
             int sessionDuration = (int) java.time.Duration.between(startTime, LocalDateTime.now()).getSeconds();
 
-            // Update session duration in the most recent session
             FeedbackSession session = new FeedbackSession();
             session.setUserId(userId);
             session.setLessonId(lessonId);
@@ -154,7 +177,6 @@ public class LiveFeedbackService {
         fallbackResponse.setIsCorrect(false);
         fallbackResponse.setTimestamp(LocalDateTime.now());
         fallbackResponse.setImprovementTips("Ensure good lighting and clear hand visibility");
-
         return fallbackResponse;
     }
 
@@ -166,15 +188,15 @@ public class LiveFeedbackService {
         if (value == null) {
             return 0.0;
         }
-        if (value instanceof Double doubleValue) {
-            return doubleValue;
+        if (value instanceof Double d) {
+            return d;
         }
-        if (value instanceof Integer intValue) {
-            return intValue.doubleValue();
+        if (value instanceof Integer i) {
+            return i.doubleValue();
         }
-        if (value instanceof String stringValue) {
+        if (value instanceof String s) {
             try {
-                return Double.parseDouble(stringValue);
+                return Double.parseDouble(s);
             } catch (NumberFormatException e) {
                 return 0.0;
             }

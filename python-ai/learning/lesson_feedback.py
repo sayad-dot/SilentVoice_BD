@@ -1,4 +1,5 @@
-# python-ai/learning/lesson_feedback.py
+import sys
+import os
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -8,9 +9,25 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
+
+# Fix the relative import issue
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
+# Import the enhanced model predictor
+try:
+    from enhanced_model_predictor import get_predictor
+    MODEL_AVAILABLE = True
+    logging.info("✅ Enhanced model predictor imported successfully")
+except ImportError as e:
+    logging.warning(f"⚠️ Could not import enhanced_model_predictor: {e}")
+    MODEL_AVAILABLE = False
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class LessonFeedbackAnalyzer:
     def __init__(self):
@@ -23,132 +40,135 @@ class LessonFeedbackAnalyzer:
             min_tracking_confidence=0.5
         )
         
-        # Load sign language patterns (you would load actual trained models here)
-        self.sign_patterns = self._load_sign_patterns()
-        logger.info("LessonFeedbackAnalyzer initialized successfully")
-    
-    def _load_sign_patterns(self) -> Dict[str, Any]:
-        """Load pre-trained sign language patterns"""
-        # This would load your actual trained models
-        # For now, returning mock patterns based on common Bangla signs
-        return {
-            "আ": {
-                "hand_positions": [(0.5, 0.3), (0.6, 0.4)], 
-                "confidence_threshold": 0.7,
-                "description": "Open palm facing forward"
-            },
-            "ই": {
-                "hand_positions": [(0.4, 0.25), (0.65, 0.35)], 
-                "confidence_threshold": 0.75,
-                "description": "Index finger pointing up"
-            },
-            "উ": {
-                "hand_positions": [(0.45, 0.3), (0.6, 0.4)], 
-                "confidence_threshold": 0.7,
-                "description": "Closed fist with thumb up"
-            },
-            "নমস্কার": {
-                "hand_positions": [(0.4, 0.2), (0.7, 0.3)], 
-                "confidence_threshold": 0.75,
-                "description": "Both palms together in greeting"
-            },
-            "ধন্যবাদ": {
-                "hand_positions": [(0.35, 0.25), (0.65, 0.35)], 
-                "confidence_threshold": 0.8,
-                "description": "Hand to chest, then forward"
-            },
-            "শুভ সকাল": {
-                "hand_positions": [(0.3, 0.2), (0.7, 0.3)], 
-                "confidence_threshold": 0.75,
-                "description": "Rising sun gesture"
-            }
-        }
-    
-    def analyze_pose(self, pose_landmarks: List[Dict], expected_sign: str) -> Dict[str, Any]:
-        """
-        Analyze pose landmarks against expected sign
+        # Get the trained model predictor
+        if MODEL_AVAILABLE:
+            self.predictor = get_predictor()
+            if self.predictor.model is not None:
+                logger.info("🚀 LessonFeedbackAnalyzer initialized with BDSLW60 trained model")
+            else:
+                logger.warning("⚠️ Model predictor created but no model loaded")
+        else:
+            self.predictor = None
+            logger.warning("⚠️ LessonFeedbackAnalyzer initialized without trained model")
         
-        Args:
-            pose_landmarks: List of pose landmark dictionaries from MediaPipe
-            expected_sign: The sign the user is supposed to perform
-            
-        Returns:
-            Dictionary with confidence score, feedback text, and correctness
-        """
+        # BDSLW60 vocabulary for fallback
+        self.bdslw60_signs = {
+            "আম": {"confidence_threshold": 0.7, "description": "Mango fruit sign"},
+            "আপেল": {"confidence_threshold": 0.7, "description": "Apple fruit sign"},
+            "এসি": {"confidence_threshold": 0.75, "description": "Air conditioner sign"},
+            "এইডস": {"confidence_threshold": 0.8, "description": "AIDS disease sign"},
+            "আলু": {"confidence_threshold": 0.7, "description": "Potato vegetable sign"},
+            "আনারস": {"confidence_threshold": 0.7, "description": "Pineapple fruit sign"},
+            "আঙুর": {"confidence_threshold": 0.7, "description": "Grapes fruit sign"},
+            "অ্যাপার্টমেন্ট": {"confidence_threshold": 0.8, "description": "Apartment building sign"},
+            "বাবা": {"confidence_threshold": 0.7, "description": "Father family sign"},
+            "মা": {"confidence_threshold": 0.7, "description": "Mother family sign"},
+            "ভাই": {"confidence_threshold": 0.7, "description": "Brother family sign"},
+            "বোন": {"confidence_threshold": 0.7, "description": "Sister family sign"},
+            "ডাক্তার": {"confidence_threshold": 0.75, "description": "Doctor profession sign"},
+            "চা": {"confidence_threshold": 0.7, "description": "Tea drink sign"},
+            "টিভি": {"confidence_threshold": 0.75, "description": "Television sign"},
+        }
+
+
+    def analyze_pose(self, pose_landmarks: List[Dict], expected_sign: str) -> Dict[str, Any]:
+        """Analyze pose landmarks using the trained BDSLW60 LSTM model"""
         try:
             if not pose_landmarks:
-                return {
-                    "confidence_score": 0.0,
-                    "feedback_text": "No pose detected. Please ensure you are visible in the camera.",
-                    "is_correct": False,
-                    "improvement_tips": "Make sure you're well-lit and within camera view."
-                }
-            
-            # Extract key hand and arm landmarks
-            key_landmarks = self._extract_key_landmarks(pose_landmarks)
-            
-            # Check if hands are visible
-            if not self._hands_visible(key_landmarks):
-                return {
-                    "confidence_score": 0.0,
-                    "feedback_text": "Hands not clearly visible. Please position yourself so both hands are in view.",
-                    "is_correct": False,
-                    "improvement_tips": "Move closer to the camera and ensure good lighting."
-                }
-            
-            # Calculate confidence based on expected sign
-            confidence_score = self._calculate_confidence(key_landmarks, expected_sign)
-            
-            # Generate feedback text
-            feedback_text = self._generate_feedback(confidence_score, expected_sign, key_landmarks)
-            
-            # Generate improvement tips
-            improvement_tips = self._generate_improvement_tips(confidence_score, expected_sign, key_landmarks)
-            
-            # Determine if sign is correct
-            threshold = self.sign_patterns.get(expected_sign, {}).get("confidence_threshold", 0.7)
-            is_correct = confidence_score >= (threshold * 100)  # Convert to percentage
-            
-            return {
-                "confidence_score": round(confidence_score, 2),
-                "feedback_text": feedback_text,
-                "is_correct": is_correct,
-                "improvement_tips": improvement_tips
-            }
-            
+                return self._create_error_response("No pose detected. Please ensure you are visible in the camera.")
+
+
+            # Use trained model if available
+            if self.predictor and MODEL_AVAILABLE and self.predictor.model is not None:
+                return self._analyze_with_trained_model(pose_landmarks, expected_sign)
+            else:
+                return self._analyze_with_fallback(pose_landmarks, expected_sign)
+
+
         except Exception as e:
-            logger.error(f"Error in analyze_pose: {str(e)}")
-            return {
-                "confidence_score": 0.0,
-                "feedback_text": f"Error analyzing pose: {str(e)}",
-                "is_correct": False,
-                "improvement_tips": "Please try again with better lighting and positioning."
-            }
-    
-    def _extract_key_landmarks(self, pose_landmarks: List[Dict]) -> Dict[str, Tuple[float, float]]:
-        """Extract key landmarks for sign language analysis"""
-        key_points = {}
+            logger.error(f"❌ Error in analyze_pose: {str(e)}")
+            return self._create_error_response(f"Analysis error: {str(e)}")
+
+
+    def _analyze_with_trained_model(self, pose_landmarks: List[Dict], expected_sign: str) -> Dict[str, Any]:
+        """Analyze using your trained BDSLW60 LSTM model"""
         
-        # MediaPipe pose landmark indices for upper body
-        landmark_indices = {
-            "left_shoulder": 11,
-            "right_shoulder": 12,
-            "left_elbow": 13,
-            "right_elbow": 14,
-            "left_wrist": 15,
-            "right_wrist": 16,
-            "left_pinky": 17,
-            "right_pinky": 18,
-            "left_index": 19,
-            "right_index": 20,
-            "left_thumb": 21,
-            "right_thumb": 22
+        # Use the enhanced model predictor's debugging method
+        return self.predictor.analyze_with_trained_model(pose_landmarks, expected_sign)
+
+    def _analyze_with_fallback(self, pose_landmarks: List[Dict], expected_sign: str) -> Dict[str, Any]:
+        """Fallback analysis when trained model is not available"""
+        
+        # Basic hand visibility check
+        key_landmarks = self._extract_key_landmarks(pose_landmarks)
+        
+        if not self._hands_visible(key_landmarks):
+            return self._create_error_response("Hands not clearly visible. Please position yourself so both hands are in view.")
+        
+        # Simple geometric confidence calculation
+        confidence_score = self._calculate_fallback_confidence(key_landmarks, expected_sign)
+        
+        # Generate fallback feedback
+        feedback_text = self._generate_fallback_feedback(confidence_score, expected_sign)
+        improvement_tips = self._generate_fallback_tips(confidence_score, expected_sign)
+        
+        threshold = self.bdslw60_signs.get(expected_sign, {}).get("confidence_threshold", 0.7)
+        is_correct = confidence_score >= (threshold * 100)
+
+
+        return {
+            "confidence_score": round(confidence_score, 2),
+            "feedback_text": feedback_text,
+            "is_correct": is_correct,
+            "improvement_tips": improvement_tips,
+            "predicted_sign": expected_sign if is_correct else None,
+            "expected_sign": expected_sign,
+            "model_status": "fallback"
         }
-        
+
+
+    def _generate_model_feedback(self, confidence: float, predicted: str, expected: str, is_correct: bool) -> str:
+        """Generate feedback based on trained model predictions"""
+        if is_correct:
+            if confidence >= 85:
+                return f"🎉 Excellent! Perfect '{expected}' sign detected with {confidence:.1f}% confidence!"
+            elif confidence >= 70:
+                return f"✅ Great job! Good '{expected}' sign recognized with {confidence:.1f}% confidence."
+            else:
+                return f"👍 Correct '{expected}' sign detected. Try to be more precise for higher confidence."
+        else:
+            if predicted and predicted != expected:
+                return f"🔄 Model detected '{predicted}' but you're practicing '{expected}'. Check your hand positioning."
+            else:
+                return f"🤔 Sign not clearly recognized. Please ensure clear visibility for '{expected}'."
+
+
+    def _generate_model_tips(self, confidence: float, predicted: str, expected: str, is_correct: bool) -> str:
+        """Generate improvement tips based on model analysis"""
+        if is_correct and confidence >= 80:
+            return "Perfect execution! Try holding the sign steady for 2-3 seconds to build consistency."
+        elif is_correct:
+            return "Good sign recognition! Focus on smoother movements and clearer hand positioning."
+        elif predicted and predicted != expected:
+            return f"The model sees '{predicted}' instead of '{expected}'. Review the lesson video and adjust your hand position."
+        else:
+            return "Ensure both hands are clearly visible and make deliberate, steady movements matching the lesson demonstration."
+
+
+    # Helper methods for fallback mode
+    def _extract_key_landmarks(self, pose_landmarks: List[Dict]) -> Dict[str, Tuple[float, float, float]]:
+        """Extract key landmarks for basic analysis"""
+        key_points = {}
+        landmark_indices = {
+            "left_shoulder": 11, "right_shoulder": 12, "left_elbow": 13, "right_elbow": 14,
+            "left_wrist": 15, "right_wrist": 16, "left_pinky": 17, "right_pinky": 18,
+            "left_index": 19, "right_index": 20, "left_thumb": 21, "right_thumb": 22
+        }
+
+
         for name, index in landmark_indices.items():
             if index < len(pose_landmarks):
                 landmark = pose_landmarks[index]
-                # Handle both dictionary and object formats
                 if isinstance(landmark, dict):
                     x = landmark.get('x', 0)
                     y = landmark.get('y', 0)
@@ -157,91 +177,77 @@ class LessonFeedbackAnalyzer:
                     x = getattr(landmark, 'x', 0)
                     y = getattr(landmark, 'y', 0)
                     visibility = getattr(landmark, 'visibility', 1)
-                
                 key_points[name] = (x, y, visibility)
-        
         return key_points
-    
+
+
     def _hands_visible(self, landmarks: Dict[str, Tuple[float, float, float]]) -> bool:
-        """Check if both hands are visible with good confidence"""
+        """Check if both hands are visible"""
         left_wrist = landmarks.get("left_wrist", (0, 0, 0))
         right_wrist = landmarks.get("right_wrist", (0, 0, 0))
-        
-        # Check visibility (MediaPipe visibility threshold)
         left_visible = len(left_wrist) > 2 and left_wrist[2] > 0.5
         right_visible = len(right_wrist) > 2 and right_wrist[2] > 0.5
-        
         return left_visible and right_visible
-    
-    def _calculate_confidence(self, landmarks: Dict[str, Tuple[float, float, float]], expected_sign: str) -> float:
-        """Calculate confidence score for the detected pose"""
-        if expected_sign not in self.sign_patterns:
-            return 30.0  # Default low confidence for unknown signs
+
+
+    def _calculate_fallback_confidence(self, landmarks: Dict, expected_sign: str) -> float:
+        """Basic confidence calculation for fallback mode"""
+        visibility_scores = [landmark[2] for landmark in landmarks.values() if len(landmark) > 2]
+        if not visibility_scores:
+            return 0.0
         
-        pattern = self.sign_patterns[expected_sign]
-        expected_positions = pattern["hand_positions"]
+        avg_visibility = sum(visibility_scores) / len(visibility_scores)
+        base_confidence = avg_visibility * 80  # Max 80% for fallback mode
         
-        # Extract current hand positions
-        left_wrist = landmarks.get("left_wrist", (0, 0, 0))[:2]
-        right_wrist = landmarks.get("right_wrist", (0, 0, 0))[:2]
+        if expected_sign in self.bdslw60_signs:
+            base_confidence += 10
         
-        if len(expected_positions) >= 2:
-            # Calculate distance from expected positions
-            left_distance = self._euclidean_distance(left_wrist, expected_positions[0])
-            right_distance = self._euclidean_distance(right_wrist, expected_positions[1])
-            
-            # Convert distance to confidence (closer = higher confidence)
-            avg_distance = (left_distance + right_distance) / 2
-            
-            # Scale distance to confidence (0-100)
-            # Closer positions (smaller distance) = higher confidence
-            confidence = max(0, 100 - (avg_distance * 300))  # Scale factor of 300
-            
-            # Add bonus for hand visibility
-            left_visibility = landmarks.get("left_wrist", (0, 0, 0))[2] if len(landmarks.get("left_wrist", (0, 0, 0))) > 2 else 0
-            right_visibility = landmarks.get("right_wrist", (0, 0, 0))[2] if len(landmarks.get("right_wrist", (0, 0, 0))) > 2 else 0
-            visibility_bonus = (left_visibility + right_visibility) * 10
-            
-            final_confidence = min(100, confidence + visibility_bonus)
-            return max(0, final_confidence)
-        
-        return 50.0  # Default confidence
-    
-    def _euclidean_distance(self, point1: Tuple[float, float], point2: Tuple[float, float]) -> float:
-        """Calculate Euclidean distance between two points"""
-        return np.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
-    
-    def _generate_feedback(self, confidence: float, expected_sign: str, landmarks: Dict) -> str:
-        """Generate human-readable feedback based on confidence and landmarks"""
-        sign_desc = self.sign_patterns.get(expected_sign, {}).get("description", expected_sign)
-        
-        if confidence >= 85:
-            return f"Excellent! Your {expected_sign} sign is very accurate. Perfect hand positioning!"
-        elif confidence >= 70:
-            return f"Great job! Your {expected_sign} sign is mostly correct. Keep practicing for consistency."
+        return min(100.0, base_confidence)
+
+
+    def _generate_fallback_feedback(self, confidence: float, expected_sign: str) -> str:
+        """Generate feedback for fallback mode"""
+        sign_desc = self.bdslw60_signs.get(expected_sign, {}).get("description", "BDSLW60 sign")
+        if confidence >= 70:
+            return f"Good visibility for '{expected_sign}' sign practice."
         elif confidence >= 50:
-            return f"Good attempt! For {expected_sign} ({sign_desc}), try to be more precise with hand positioning."
-        elif confidence >= 30:
-            return f"Getting there! Remember, {expected_sign} requires: {sign_desc}. Check your hand positions."
+            return f"Fair attempt at '{expected_sign}' ({sign_desc}). Improve hand positioning."
         else:
-            return f"Keep practicing! For {expected_sign}, focus on: {sign_desc}. Make sure both hands are clearly visible."
-    
-    def _generate_improvement_tips(self, confidence: float, expected_sign: str, landmarks: Dict) -> str:
-        """Generate specific improvement tips"""
-        if confidence >= 80:
-            return "You're doing great! Try to hold the sign steady for 2-3 seconds."
-        elif confidence >= 60:
-            return "Almost there! Pay attention to finger positioning and hand orientation."
-        elif confidence >= 40:
-            return "Focus on hand placement. Make sure both hands are clearly visible and in the correct position."
+            return f"Keep practicing '{expected_sign}' with better lighting and hand visibility."
+
+
+    def _generate_fallback_tips(self, confidence: float, expected_sign: str) -> str:
+        """Generate tips for fallback mode"""
+        if confidence >= 70:
+            return "Good hand visibility. The trained model would provide better feedback."
         else:
-            return "Start with basic hand positioning. Ensure good lighting and camera angle for better detection."
+            return "Ensure both hands are clearly visible and well-lit. Check camera positioning."
+
+
+    def _create_error_response(self, message: str) -> Dict[str, Any]:
+        """Create standard error response"""
+        return {
+            "confidence_score": 0.0,
+            "feedback_text": message,
+            "is_correct": False,
+            "improvement_tips": "Ensure good lighting and clear hand visibility.",
+            "predicted_sign": None,
+            "model_status": "error"
+        }
+
+
+    def reset_session(self):
+        """Reset prediction session"""
+        if self.predictor:
+            self.predictor.reset_sequence()
+        logger.info("🔄 Session reset completed")
+
 
 # Flask API setup
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://localhost:8080"])  # Add your frontend URLs
-
+CORS(app, origins=["http://localhost:3000", "http://localhost:8080"])
 analyzer = LessonFeedbackAnalyzer()
+
 
 @app.route('/analyze_pose', methods=['POST'])
 def analyze_pose():
@@ -254,26 +260,39 @@ def analyze_pose():
                 "is_correct": False,
                 "improvement_tips": "Please ensure pose data is being sent correctly."
             }), 400
-        
+
+
         pose_landmarks = data.get('pose_landmarks', [])
         expected_sign = data.get('expected_sign', '')
         user_id = data.get('user_id', 'unknown')
-        
-        logger.info(f"Analyzing pose for user {user_id}, expected sign: {expected_sign}")
-        
+
+
+        logger.info(f"🎯 Analyzing pose for user {user_id}, expected sign: {expected_sign}")
+        logger.info(f"📊 Received {len(pose_landmarks)} landmarks")
+
+
         if not expected_sign:
             return jsonify({
                 "confidence_score": 0.0,
                 "feedback_text": "No expected sign provided",
                 "is_correct": False,
-                "improvement_tips": "Please specify which sign you're practicing."
+                "improvement_tips": "Please specify which BDSLW60 sign you're practicing."
             }), 400
-        
+
+
         result = analyzer.analyze_pose(pose_landmarks, expected_sign)
-        return jsonify(result)
         
+        # Log the analysis result
+        logger.info(f"📊 Analysis result: {result.get('predicted_sign', 'None')} | "
+                   f"Confidence: {result.get('confidence_score', 0):.2f}% | "
+                   f"Correct: {result.get('is_correct', False)} | "
+                   f"Status: {result.get('model_status', 'unknown')}")
+        
+        return jsonify(result)
+
+
     except Exception as e:
-        logger.error(f"Error in analyze_pose endpoint: {str(e)}")
+        logger.error(f"❌ Error in analyze_pose endpoint: {str(e)}")
         return jsonify({
             "confidence_score": 0.0,
             "feedback_text": f"Analysis error: {str(e)}",
@@ -281,30 +300,45 @@ def analyze_pose():
             "improvement_tips": "Please try again with better lighting and positioning."
         }), 500
 
+
+@app.route('/reset_session', methods=['POST'])
+def reset_session():
+    try:
+        analyzer.reset_session()
+        return jsonify({
+            "status": "success",
+            "message": "BDSLW60 model sequence reset successfully"
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error", 
+            "message": f"Error resetting session: {str(e)}"
+        }), 500
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({
-        "status": "healthy",
-        "service": "lesson_feedback_analyzer",
-        "available_signs": list(analyzer.sign_patterns.keys())
-    })
-
-@app.route('/signs', methods=['GET'])
-def get_available_signs():
-    """Get list of available signs for training"""
-    signs_info = {}
-    for sign, pattern in analyzer.sign_patterns.items():
-        signs_info[sign] = {
-            "description": pattern.get("description", ""),
-            "difficulty": "Easy" if pattern.get("confidence_threshold", 0.7) <= 0.7 else "Medium"
-        }
+    model_loaded = (analyzer.predictor and MODEL_AVAILABLE and analyzer.predictor.model is not None)
+    model_status = "BDSLW60_loaded" if model_loaded else "fallback_mode"
     
     return jsonify({
-        "available_signs": signs_info,
-        "total_count": len(signs_info)
+        "status": "healthy",
+        "service": "BDSLW60_enhanced_analyzer",
+        "model_status": model_status,
+        "model_loaded": model_loaded,
+        "dataset": "BDSLW60",
+        "total_classes": 60,
+        "available_signs": list(analyzer.bdslw60_signs.keys())[:10]
     })
 
+
 if __name__ == '__main__':
-    logger.info("Starting Lesson Feedback Analyzer service...")
-    logger.info(f"Available signs: {list(analyzer.sign_patterns.keys())}")
+    logger.info("🚀 Starting BDSLW60 Enhanced Lesson Feedback Analyzer...")
+    logger.info(f"📊 Model available: {MODEL_AVAILABLE}")
+    if analyzer.predictor and analyzer.predictor.model is not None:
+        logger.info("✅ Model successfully loaded!")
+    else:
+        logger.warning("⚠️ Model not loaded - running in fallback mode")
+    logger.info(f"🎯 Dataset: BDSLW60 (60 classes)")
+    logger.info(f"📋 Sample signs: {list(analyzer.bdslw60_signs.keys())[:5]}")
     app.run(host='0.0.0.0', port=5000, debug=True)

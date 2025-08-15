@@ -33,7 +33,7 @@ public class LiveProcessingService {
 
     private static final Logger logger = LoggerFactory.getLogger(LiveProcessingService.class);
 
-    @Value("${ai.python.venv.path:python-ai/ai-env/bin/python}")
+    @Value("${ai.python.venv.path:python-ai/ai-env-py311/bin/python}")
     private String pythonVenv;
 
     @Value("${ai.python.scripts.path:python-ai/scripts/}")
@@ -205,7 +205,7 @@ public class LiveProcessingService {
         executor.setStreamHandler(streamHandler);
 
         // Slightly longer timeout for enhanced processing
-        ExecuteWatchdog watchdog = new ExecuteWatchdog(30000); // 30 seconds
+        ExecuteWatchdog watchdog = new ExecuteWatchdog(60000); // 30 seconds
         executor.setWatchdog(watchdog);
 
         try {

@@ -66,6 +66,26 @@ public class LiveFeedbackController {
         }
     }
 
+    @PostMapping("/{lessonId}/session/reset")
+    public ResponseEntity<Map<String, Object>> resetFeedbackSession(
+            @PathVariable Long lessonId,
+            @AuthenticationPrincipal User user) {
+        try {
+            feedbackService.resetFeedbackSession(lessonId, user.getId());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("lessonId", lessonId);
+            response.put("status", "reset");
+            response.put("message", "Session reset successfully");
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Failed to reset session: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(error);
+        }
+    }
+
     @PostMapping("/{lessonId}/session/end")
     public ResponseEntity<Map<String, Object>> endFeedbackSession(
             @PathVariable Long lessonId,
