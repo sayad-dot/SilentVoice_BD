@@ -6,355 +6,605 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestTemplate;
 
 import com.example.silentvoice_bd.learning.dto.ChatMessage;
 import com.example.silentvoice_bd.learning.dto.ChatResponse;
 import com.example.silentvoice_bd.learning.model.ChatConversation;
 import com.example.silentvoice_bd.learning.repository.ChatConversationRepository;
-
-import reactor.core.publisher.Mono;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 @Service
 public class ChatbotService {
 
-    /* ──────────────────────────
-       Dependencies & config
-    ────────────────────────── */
+    private static final Logger log = LoggerFactory.getLogger(ChatbotService.class);
+
     @Autowired
     private ChatConversationRepository conversationRepository;
 
+    // Gemini Configuration
+    @Value("${gemini.api.key:}")
+    private String geminiApiKey;
+
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent}")
+    private String geminiApiUrl;
+
+    @Value("${gemini.model:gemini-2.0-flash}")
+    private String geminiModel;
+
+    // OpenAI Configuration (backup)
     @Value("${openai.api.key:}")
     private String openaiApiKey;
 
-    private final WebClient webClient;
+    @Value("${openai.api.url:https://api.openai.com/v1/chat/completions}")
+    private String openaiApiUrl;
 
-    public ChatbotService() {
-        this.webClient = WebClient.builder()
-                .baseUrl("https://api.openai.com/v1")
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
-    }
+    @Value("${openai.model:gpt-3.5-turbo}")
+    private String openaiModel;
 
-    /* ──────────────────────────
-       Public entry point
-    ────────────────────────── */
+    @Autowired
+    private RestTemplate restTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Main entry point for processing chat messages
+     */
     public ChatResponse processMessage(ChatMessage message, UUID userId) {
         try {
-            // Debug
-            System.out.println("Processing msg: " + message.getContent());
-            System.out.println("Context JSON: " + message.getContextDataAsJson());
+            log.info("Processing message from user {}: {}", userId, message.getContent());
 
+            // Validate input
             if (message.getContent() == null || message.getContent().trim().isEmpty()) {
                 throw new IllegalArgumentException("Message content cannot be null or empty");
             }
 
-            /* 1️⃣  Save user message */
-            ChatConversation userConv = new ChatConversation();
-            userConv.setUserId(userId);
-            userConv.setLessonId(message.getLessonId());
-            userConv.setMessage(message.getContent().trim());
-            userConv.setSender("USER");
-            userConv.setContextData(message.getContextDataAsJson());
-            userConv.setCreatedAt(LocalDateTime.now());
-            conversationRepository.save(userConv);
+            // Save user message
+            saveUserMessage(message, userId);
 
-            /* 2️⃣  Fetch last 10 exchanges for context */
-            List<ChatConversation> history = conversationRepository
-                    .findByUserIdAndLessonIdOrderByCreatedAtDesc(userId, message.getLessonId())
-                    .stream().limit(10).collect(Collectors.toList());
+            // Get conversation history for context
+            List<ChatConversation> history = getRecentHistory(userId, message.getLessonId());
 
-            /* 3️⃣  Generate response */
-            String botReply = generateBotResponse(message.getContent(), history, message);
+            // Generate AI response (try Gemini first, then OpenAI as backup)
+            String botReply = generateAIResponse(message.getContent(), history, message);
 
-            /* 4️⃣  Persist bot response */
-            ChatConversation botConv = new ChatConversation();
-            botConv.setUserId(userId);
-            botConv.setLessonId(message.getLessonId());
-            botConv.setMessage(botReply);
-            botConv.setSender("BOT");
-            botConv.setContextData(message.getContextDataAsJson());
-            botConv.setCreatedAt(LocalDateTime.now());
-            conversationRepository.save(botConv);
+            // Save bot response
+            saveBotMessage(botReply, message, userId);
 
-            /* 5️⃣  Return payload */
-            ChatResponse resp = new ChatResponse();
-            resp.setContent(botReply);
-            resp.setSender("BOT");
-            resp.setTimestamp(LocalDateTime.now());
-            resp.setIsError(false);
-            return resp;
+            // Return response
+            return createSuccessResponse(botReply);
 
         } catch (Exception e) {
-            System.err.println("ChatbotService error: " + e.getMessage());
-            ChatResponse err = new ChatResponse();
-            err.setContent("I'm having trouble responding right now. Please try again in a moment.");
-            err.setSender("BOT");
-            err.setTimestamp(LocalDateTime.now());
-            err.setIsError(true);
-            err.setErrorMessage(e.getMessage());
-            return err;
+            log.error("Error processing chatbot message for user {}: {}", userId, e.getMessage(), e);
+            return createErrorResponse("I'm having trouble responding right now. Please try again in a moment! 😊");
         }
     }
 
-    /* ──────────────────────────
-       Core response generator
-    ────────────────────────── */
-    private String generateBotResponse(String userMsg,
-            List<ChatConversation> history,
-            ChatMessage msgCtx) {
+    /**
+     * Generate AI response - tries Gemini first, then OpenAI, then fallback
+     */
+    /**
+     * Generate AI response - tries Gemini first, then OpenAI, then fallback
+     */
+    private String generateAIResponse(String userMessage, List<ChatConversation> history, ChatMessage context) {
+        log.info("=== AI RESPONSE GENERATION ===");
 
-        /* If no OpenAI key → fallback engine */
-        if (openaiApiKey == null || openaiApiKey.isEmpty()) {
-            return getEnhancedFallbackResponse(userMsg, msgCtx);
+        // ✅ FIXED: Try Gemini first (correct validation)
+        if (geminiApiKey != null && !geminiApiKey.isEmpty() && !geminiApiKey.equals("your-gemini-api-key-here")) {
+            try {
+                log.info("🤖 Using Google Gemini API for response");
+                log.info("Gemini Key: {} chars, starts with: {}",
+                        geminiApiKey.length(),
+                        geminiApiKey.substring(0, Math.min(6, geminiApiKey.length())));
+                return getGeminiResponse(userMessage, history, context);
+            } catch (Exception e) {
+                log.warn("🔄 Gemini API failed: {}, trying OpenAI backup", e.getMessage());
+            }
+        } else {
+            log.warn("⚠️ Gemini API key not valid: null={}, empty={}, length={}",
+                    geminiApiKey == null,
+                    geminiApiKey != null ? geminiApiKey.isEmpty() : "N/A",
+                    geminiApiKey != null ? geminiApiKey.length() : 0);
         }
 
-        try {
-            /* 1. Build prompt list */
-            List<Map<String, Object>> msgs = new ArrayList<>();
-            msgs.add(Map.of("role", "system", "content", buildSystemPrompt(msgCtx)));
-
-            Collections.reverse(history); // chronological
-            for (ChatConversation c : history) {
-                msgs.add(Map.of("role", c.getSender().equals("USER") ? "user" : "assistant",
-                        "content", c.getMessage()));
+        // Try OpenAI as backup
+        if (openaiApiKey != null && !openaiApiKey.isEmpty() && !openaiApiKey.equals("your-openai-api-key-here")) {
+            try {
+                log.info("🔄 Using OpenAI API as backup");
+                return getOpenAIResponse(userMessage, history, context);
+            } catch (Exception e) {
+                log.warn("⚠️ Both AI APIs failed, falling back to enhanced responses: {}", e.getMessage());
             }
+        }
 
-            msgs.add(Map.of("role", "user",
-                    "content", addContextToMessage(userMsg, msgCtx)));
+        // Fallback to enhanced rule-based responses
+        log.info("📝 Using fallback rule-based responses");
+        return getEnhancedFallbackResponse(userMessage, context);
+    }
 
-            /* 2. OpenAI request */
-            Map<String, Object> payload = Map.of(
-                    "model", "gpt-3.5-turbo",
-                    "messages", msgs,
-                    "max_tokens", 200,
-                    "temperature", 0.7,
-                    "presence_penalty", 0.1,
-                    "frequency_penalty", 0.1
+    private String getGeminiResponse(String userMessage, List<ChatConversation> history, ChatMessage context) {
+        try {
+            log.info("🌐 Making Gemini API request...");
+            log.info("Model: {}", geminiModel);
+            log.info("URL: {}", geminiApiUrl);
+
+            // Build conversation context for Gemini
+            String conversationContext = buildGeminiPrompt(userMessage, history, context);
+            log.info("📝 Gemini prompt length: {} characters", conversationContext.length());
+
+            // Create request payload for Gemini
+            Map<String, Object> requestBody = Map.of(
+                    "contents", List.of(
+                            Map.of(
+                                    "parts", List.of(
+                                            Map.of("text", conversationContext)
+                                    )
+                            )
+                    ),
+                    "generationConfig", Map.of(
+                            "temperature", 0.7,
+                            "maxOutputTokens", 250,
+                            "topP", 0.8,
+                            "topK", 10
+                    )
             );
 
-            Mono<Map> responseMono = webClient.post()
-                    .uri("/chat/completions")
-                    .header("Authorization", "Bearer " + openaiApiKey)
-                    .bodyValue(payload)
-                    .retrieve()
-                    .bodyToMono(Map.class);
+            // Set headers with API key
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", geminiApiKey);
 
-            Map<String, Object> resp = responseMono.block();
-            if (resp != null && resp.containsKey("choices")) {
-                List<?> choices = (List<?>) resp.get("choices");
-                if (!choices.isEmpty()) {
-                    Map<?, ?> choice = (Map<?, ?>) choices.get(0);
-                    Map<?, ?> msg = (Map<?, ?>) choice.get("message");
-                    return msg.get("content").toString().trim();
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            // Make API call
+            log.info("📡 Sending request to Gemini...");
+            String response = restTemplate.exchange(
+                    geminiApiUrl,
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            ).getBody();
+
+            log.info("✅ Gemini response received: {} characters", response != null ? response.length() : 0);
+            log.debug("Raw Gemini response: {}", response);
+
+            // Parse response
+            String parsedResponse = parseGeminiResponse(response);
+            log.info("🎯 Parsed Gemini response: {}", parsedResponse.length() > 100
+                    ? parsedResponse.substring(0, 100) + "..." : parsedResponse);
+
+            return parsedResponse;
+
+        } catch (RestClientResponseException e) {
+            log.error("🚫 Gemini API HTTP error {}: {}", e.getRawStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Gemini API call failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            log.error("❌ Gemini API error: {}", e.getMessage(), e);
+            throw new RuntimeException("Gemini API call failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Build prompt for Gemini API
+     */
+    private String buildGeminiPrompt(String userMessage, List<ChatConversation> history, ChatMessage context) {
+        StringBuilder prompt = new StringBuilder();
+
+        // System context
+        String systemPrompt = buildSystemPrompt(context);
+        prompt.append(systemPrompt).append("\n\n");
+
+        // Add conversation history
+        if (!history.isEmpty()) {
+            prompt.append("Previous conversation:\n");
+            Collections.reverse(history);
+            for (ChatConversation conv : history.stream().limit(5).collect(Collectors.toList())) {
+                String role = "USER".equals(conv.getSender()) ? "Human" : "Assistant";
+                prompt.append(role).append(": ").append(conv.getMessage()).append("\n");
+            }
+            prompt.append("\n");
+        }
+
+        // Current user message
+        String pageContext = extractPageContext(context);
+        prompt.append("Current context: User is on ").append(pageContext).append(" page\n");
+        prompt.append("Human: ").append(userMessage).append("\n");
+        prompt.append("Assistant:");
+
+        return prompt.toString();
+    }
+
+    /**
+     * Parse Gemini API response
+     */
+    private String parseGeminiResponse(String response) throws Exception {
+        JsonNode jsonNode = objectMapper.readTree(response);
+        JsonNode candidates = jsonNode.get("candidates");
+
+        if (candidates != null && candidates.isArray() && candidates.size() > 0) {
+            JsonNode firstCandidate = candidates.get(0);
+            JsonNode content = firstCandidate.get("content");
+            if (content != null) {
+                JsonNode parts = content.get("parts");
+                if (parts != null && parts.isArray() && parts.size() > 0) {
+                    JsonNode text = parts.get(0).get("text");
+                    if (text != null) {
+                        return text.asText().trim();
+                    }
                 }
             }
-            return getEnhancedFallbackResponse(userMsg, msgCtx);
-
-        } catch (WebClientResponseException e) {
-            System.err.println("OpenAI API error: " + e.getMessage());
-            return getEnhancedFallbackResponse(userMsg, msgCtx);
-        } catch (Exception e) {
-            System.err.println("Unexpected OpenAI error: " + e.getMessage());
-            return getEnhancedFallbackResponse(userMsg, msgCtx);
         }
+
+        throw new Exception("Invalid Gemini response format: " + response);
     }
 
-    /* ──────────────────────────
-       Prompt & context helpers
-    ────────────────────────── */
-    private String buildSystemPrompt(ChatMessage ctx) {
-        String base = "You are SignHelper, an intelligent AI assistant for SilentVoice BD (Bangla sign-language platform). ";
-
-        switch (extractPageContext(ctx)) {
-            case "upload":
-                return base + "Currently on the video-upload screen. Help with upload steps, supported formats, file-size limits, AI processing times, and general sign-language questions. Be technical yet encouraging.";
-            case "live":
-                return base + "User is in live-recognition. Assist with webcam setup, lighting, positioning, real-time accuracy tips, and practice advice. Be practical and supportive.";
-            case "learning":
-                return base + "User is in structured lessons. Provide lesson navigation help, hand-position guidance, cultural context, and practice strategies. Be educational and motivating.";
-            default:
-                return base + "User may ask about any part of the app. Provide navigation help, sign-language guidance, technical support, and cultural insights. Adapt answers to user needs.";
-        }
-    }
-
-    private String extractPageContext(ChatMessage ctx) {
+    /**
+     * Get response from OpenAI GPT API (backup method)
+     */
+    private String getOpenAIResponse(String userMessage, List<ChatConversation> history, ChatMessage context) {
         try {
-            String json = ctx.getContextDataAsJson();
-            if (json.contains("\"page_context\":\"upload\"")) {
-                return "upload";
-            }
-            if (json.contains("\"page_context\":\"live\"")) {
-                return "live";
-            }
-            if (json.contains("\"page_context\":\"learning\"")) {
-                return "learning";
-            }
-        } catch (Exception ignored) {
+            log.info("🌐 Making OpenAI API request...");
+            log.info("Model: {}", openaiModel);
+
+            // Build messages for OpenAI
+            List<Map<String, String>> messages = buildOpenAIMessages(userMessage, history, context);
+
+            // Create request payload
+            Map<String, Object> requestBody = Map.of(
+                    "model", openaiModel,
+                    "messages", messages,
+                    "max_tokens", 250,
+                    "temperature", 0.7
+            );
+
+            // Set headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(openaiApiKey);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            // Make API call
+            log.info("📡 Sending request to OpenAI...");
+            String response = restTemplate.exchange(
+                    openaiApiUrl,
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            ).getBody();
+
+            log.info("✅ OpenAI response received: {} characters", response != null ? response.length() : 0);
+
+            // Parse response
+            return parseOpenAIResponse(response);
+
+        } catch (RestClientResponseException e) {
+            log.error("🚫 OpenAI API HTTP error {}: {}", e.getRawStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("OpenAI API call failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            log.error("❌ OpenAI API error: {}", e.getMessage(), e);
+            throw new RuntimeException("OpenAI API call failed: " + e.getMessage(), e);
         }
-        return "general";
     }
 
-    private String addContextToMessage(String userMsg, ChatMessage ctx) {
-        return "[Context: user is on " + extractPageContext(ctx) + " page] " + userMsg;
+    /**
+     * Build messages array for OpenAI API
+     */
+    private List<Map<String, String>> buildOpenAIMessages(String userMessage, List<ChatConversation> history, ChatMessage context) {
+        List<Map<String, String>> messages = new ArrayList<>();
+
+        // System message with context
+        messages.add(Map.of("role", "system", "content", buildSystemPrompt(context)));
+
+        // Add conversation history (last 10 messages)
+        Collections.reverse(history);
+        for (ChatConversation conv : history.stream().limit(10).collect(Collectors.toList())) {
+            String role = "USER".equals(conv.getSender()) ? "user" : "assistant";
+            messages.add(Map.of("role", role, "content", conv.getMessage()));
+        }
+
+        // Add current user message with context
+        messages.add(Map.of("role", "user", "content", addContextToMessage(userMessage, context)));
+
+        return messages;
     }
 
-    /* ──────────────────────────
-       Fallback engine (keyword rules)
-    ────────────────────────── */
-    private String getEnhancedFallbackResponse(String userMsg, ChatMessage ctx) {
-        String pc = extractPageContext(ctx);
+    /**
+     * Build context-aware system prompt
+     */
+    private String buildSystemPrompt(ChatMessage context) {
+        String basePrompt = "You are SignHelper, an intelligent and friendly AI assistant for SilentVoice BD, "
+                + "a Bangla sign language learning platform. You are helpful, encouraging, and knowledgeable about "
+                + "sign language, technology, and learning techniques. ";
 
-        // -------- Page-specific quick answers --------
-        if (pc.equals("upload")) {
-            if (has(userMsg, "why", "long", "taking", "slow", "time")) {
-                return "Upload time depends on file size, internet speed and server load. Large files (>50MB) or slow networks take longer. Try a smaller file or check your connection.";
-            }
-            if (has(userMsg, "how", "analysis", "work", "ai", "recognize")) {
-                return "Our AI grabs frames, analyses hand shapes/movements via deep-learning models, then matches patterns to Bangla signs. Whole process usually finishes in 30-90 seconds.";
-            }
-            if (has(userMsg, "format", "support", "type", "file")) {
-                return "Supported video formats: MP4, AVI, MOV, WMV. Max file size: 100 MB. For best accuracy, ensure clear lighting and keep your hands fully visible.";
-            }
-            if (has(userMsg, "error", "failed", "not", "working", "problem")) {
-                return "Upload issues? Check 1) format (MP4/AVI/MOV), 2) size <100 MB, 3) stable internet. Refresh or use another browser if it still fails.";
-            }
+        String pageContext = extractPageContext(context);
+
+        switch (pageContext) {
+            case "upload":
+                return basePrompt + "The user is currently on the video upload page. Help them with file uploads, "
+                        + "supported formats, AI processing, troubleshooting, and general sign language questions. "
+                        + "Be technical yet encouraging and provide clear step-by-step guidance.";
+
+            case "live":
+                return basePrompt + "The user is using live recognition features. Assist with webcam setup, "
+                        + "lighting optimization, hand positioning, real-time feedback, and practice tips. "
+                        + "Be practical and supportive, focusing on improving their experience.";
+
+            case "learning":
+                return basePrompt + "The user is in the learning section. Provide lesson guidance, practice techniques, "
+                        + "cultural context about Bangla sign language, motivation, and educational support. "
+                        + "Be encouraging and educational, helping them progress in their learning journey.";
+
+            default:
+                return basePrompt + "The user may ask about any aspect of the application. Provide navigation help, "
+                        + "feature explanations, sign language guidance, technical support, and motivational encouragement. "
+                        + "Adapt your responses to their needs and maintain a friendly, helpful tone.";
         }
-
-        if (pc.equals("live")) {
-            if (has(userMsg, "camera", "webcam", "not", "working", "black")) {
-                return "Camera tips: allow browser permissions, close other apps using camera, refresh the page or test with a different browser. Verify the camera works in another application.";
-            }
-            if (has(userMsg, "accuracy", "improve", "better", "recognition")) {
-                return "Improve live accuracy: good lighting, plain background, keep hands centred, sign at normal speed and stay about an arm’s length from the camera.";
-            }
-            if (has(userMsg, "how", "start", "use", "live")) {
-                return "Click ‘Start Camera’, grant permissions, ensure your hands are visible, then start signing. The AI will analyse each sign instantly.";
-            }
-        }
-
-        if (pc.equals("learning")) {
-            if (has(userMsg, "lesson", "start", "begin", "how")) {
-                return "Open a lesson, watch the demonstration video, then practise. Use Mirror Practice to compare your signs in real time.";
-            }
-            if (has(userMsg, "practice", "improve", "better", "technique")) {
-                return "Practice tips: start slowly, focus on accurate hand shapes, use a mirror or webcam, practise 15-20 min daily, and record yourself for review.";
-            }
-        }
-
-        // -------- Cross-page intents --------
-        if (has(userMsg, "how", "use", "app", "navigate", "around", "started", "help", "guide")) {
-            return getAppGuidanceResponse(pc);
-        }
-
-        if (has(userMsg, "not", "working", "error", "problem", "issue", "trouble", "stuck", "broken")) {
-            return getTechnicalSupportResponse(pc);
-        }
-
-        if (has(userMsg, "sign", "hand", "finger", "position", "movement", "gesture", "bangla")) {
-            return "Keep hands fully visible, move deliberately, maintain consistent hand shapes and practise slowly at first. Consistency is crucial for accurate recognition.";
-        }
-
-        if (has(userMsg, "bangla", "bangladesh", "culture", "deaf", "community", "important", "why", "learn")) {
-            return "Bangla Sign Language serves 200,000+ deaf individuals in Bangladesh. Learning it fosters inclusion, bridges communication gaps and supports the Deaf community’s rich culture.";
-        }
-
-        if (has(userMsg, "difficult", "hard", "frustrated", "can't", "struggling", "give up", "quit")) {
-            return "Every expert was once a beginner! Practise steadily, celebrate small wins and be patient. Your dedication helps make communication inclusive for all. 💪";
-        }
-
-        if (has(userMsg, "thank", "thanks", "good", "great", "helpful", "awesome")) {
-            return "You're welcome! I'm glad I could help. Keep exploring the app and practising your signs—I'm here whenever you need me.";
-        }
-
-        // -------- Default contextual fallback --------
-        return getContextualDefaultResponse(pc);
     }
 
-    /* ──────────────────────────
-       Helper methods
-    ────────────────────────── */
-    private boolean has(String msg, String... keys) {
-        String lower = msg.toLowerCase();
-        for (String k : keys) {
-            if (Pattern.compile("\\b" + Pattern.quote(k.toLowerCase()) + "\\b").matcher(lower).find()) {
+    /**
+     * Parse OpenAI API response
+     */
+    private String parseOpenAIResponse(String response) throws Exception {
+        JsonNode jsonNode = objectMapper.readTree(response);
+        JsonNode choices = jsonNode.get("choices");
+
+        if (choices != null && choices.isArray() && choices.size() > 0) {
+            JsonNode firstChoice = choices.get(0);
+            JsonNode message = firstChoice.get("message");
+            if (message != null) {
+                JsonNode content = message.get("content");
+                if (content != null) {
+                    return content.asText().trim();
+                }
+            }
+        }
+
+        throw new Exception("Invalid OpenAI response format");
+    }
+
+    // Keep ALL your existing fallback, database, and utility methods...
+    /**
+     * Enhanced fallback response system
+     */
+    private String getEnhancedFallbackResponse(String userMessage, ChatMessage context) {
+        String pageContext = extractPageContext(context);
+        String lowerMessage = userMessage.toLowerCase();
+
+        // Greeting responses
+        if (containsAny(lowerMessage, "hello", "hi", "hey", "start", "help")) {
+            return getGreetingResponse(pageContext);
+        }
+
+        // Page-specific responses
+        switch (pageContext) {
+            case "upload":
+                return getUploadPageResponse(lowerMessage);
+            case "live":
+                return getLivePageResponse(lowerMessage);
+            case "learning":
+                return getLearningPageResponse(lowerMessage);
+            default:
+                return getGeneralResponse(lowerMessage);
+        }
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
                 return true;
             }
         }
         return false;
     }
 
-    private String getAppGuidanceResponse(String pc) {
-        switch (pc) {
+    private String extractPageContext(ChatMessage context) {
+        try {
+            String contextData = context.getContextDataAsJson();
+            if (contextData.contains("\"page_context\":\"upload\"")) {
+                return "upload";
+            }
+            if (contextData.contains("\"page_context\":\"live\"")) {
+                return "live";
+            }
+            if (contextData.contains("\"page_context\":\"learning\"")) {
+                return "learning";
+            }
+        } catch (Exception e) {
+            log.debug("Could not extract page context: {}", e.getMessage());
+        }
+        return "general";
+    }
+
+    private String addContextToMessage(String userMessage, ChatMessage context) {
+        String pageContext = extractPageContext(context);
+        return String.format("[Context: user is on %s page] %s", pageContext, userMessage);
+    }
+
+    private String getUploadPageResponse(String message) {
+        if (containsAny(message, "slow", "taking", "long", "time")) {
+            return "Upload speed depends on your file size and internet connection. Large files (>50MB) may take longer. "
+                    + "For best results, ensure stable internet and try uploading during off-peak hours. 📤";
+        }
+        if (containsAny(message, "format", "support", "type")) {
+            return "We support MP4, AVI, MOV, and WMV formats. Maximum file size is 100MB. "
+                    + "For optimal AI analysis, use good lighting and keep your hands clearly visible. 🎥";
+        }
+        if (containsAny(message, "analysis", "ai", "how", "work")) {
+            return "Our AI extracts video frames, analyzes hand movements using deep learning, "
+                    + "and matches patterns to Bangla signs. The process typically takes 30-90 seconds. 🤖";
+        }
+        if (containsAny(message, "error", "failed", "problem")) {
+            return "Upload issues? Check: 1) File format (MP4/AVI/MOV), 2) Size <100MB, 3) Stable internet. "
+                    + "Try refreshing or using a different browser if problems persist. 🔧";
+        }
+        return "I'm here to help with your video uploads! Ask about supported formats, file sizes, or troubleshooting. 📁";
+    }
+
+    private String getLivePageResponse(String message) {
+        if (containsAny(message, "camera", "webcam", "not working", "black")) {
+            return "Camera troubleshooting: 1) Allow browser permissions, 2) Close other apps using camera, "
+                    + "3) Refresh page, 4) Try different browser. Check if camera works in other applications. 📹";
+        }
+        if (containsAny(message, "accuracy", "improve", "better")) {
+            return "Improve recognition: 1) Good lighting (natural light is best), 2) Plain background, "
+                    + "3) Keep hands centered, 4) Sign at normal speed, 5) Stay arm's length from camera. ✨";
+        }
+        if (containsAny(message, "lighting", "light")) {
+            return "Optimal lighting tips: Face a window for natural light, avoid backlighting, "
+                    + "ensure even lighting on both hands, avoid shadows. Good lighting dramatically improves accuracy! 💡";
+        }
+        return "I'm here to help with live recognition! Ask about camera setup, lighting, or accuracy tips. 🎯";
+    }
+
+    private String getLearningPageResponse(String message) {
+        if (containsAny(message, "lesson", "start", "begin")) {
+            return "Starting lessons: 1) Choose your level, 2) Watch demonstration videos, "
+                    + "3) Practice with Mirror Mode, 4) Take your time to master each sign. Progress at your own pace! 📚";
+        }
+        if (containsAny(message, "practice", "improve", "technique")) {
+            return "Practice tips: 1) Start slowly, 2) Focus on hand shapes, 3) Use mirror or webcam, "
+                    + "4) Practice 15-20 min daily, 5) Record yourself for review. Consistency is key! 💪";
+        }
+        if (containsAny(message, "culture", "bangladesh", "deaf", "community")) {
+            return "Bangla Sign Language serves 200,000+ deaf individuals in Bangladesh. It has rich cultural expressions "
+                    + "and its own grammar. Learning it builds bridges and supports our deaf community! 🇧🇩";
+        }
+        if (containsAny(message, "difficult", "hard", "struggling")) {
+            return "Learning can be challenging, but every expert was once a beginner! Break complex signs into steps, "
+                    + "practice regularly, celebrate small wins, and be patient with yourself. You're doing great! 🌟";
+        }
+        return "I'm here to support your learning journey! Ask about lessons, practice tips, or Bangla sign culture. 🎓";
+    }
+
+    private String getGeneralResponse(String message) {
+        if (containsAny(message, "navigation", "how to use", "guide")) {
+            return "SilentVoice BD Navigation: 📤 Upload for video analysis, 📹 Live for real-time recognition, "
+                    + "📚 Learn for structured lessons. I'm here to help with any feature! 🗺️";
+        }
+        if (containsAny(message, "motivation", "encourage")) {
+            return "You're on an amazing journey learning sign language! Every step you take helps create "
+                    + "a more inclusive world. Keep practicing, stay curious, and remember - progress over perfection! 🌈";
+        }
+        if (containsAny(message, "thank", "thanks", "good", "helpful")) {
+            return "You're very welcome! I'm glad I could help. Keep exploring and practicing - "
+                    + "I'm always here when you need assistance on your sign language journey! 😊";
+        }
+        return "I'm SignHelper, your AI assistant for SilentVoice BD! I can help with uploads, live recognition, "
+                + "lessons, or any sign language questions. What would you like to know? 🤝";
+    }
+
+    private String getGreetingResponse(String pageContext) {
+        switch (pageContext) {
             case "upload":
-                return "You're on the Video Upload page. Drag-and-drop or browse for a video (<100 MB). Enable AI analysis for automatic sign recognition once it finishes uploading.";
+                return "👋 Hello! I'm here to help with video uploads and AI analysis. "
+                        + "Upload your sign language videos and I'll guide you through the process!";
             case "live":
-                return "This is Live Recognition. Click ‘Start Camera’, allow permissions and sign naturally while keeping hands visible. Real-time feedback will appear under the video.";
+                return "🎥 Hi there! Ready for live sign recognition? I can help with camera setup, "
+                        + "lighting tips, and improving your real-time accuracy!";
             case "learning":
-                return "In Learn Signs you’ll find structured lessons with demo videos and Mirror Practice. Start with basics, then progress to words and phrases.";
+                return "📚 Welcome to your learning journey! I'm here to help you master Bangla sign language "
+                        + "with lessons, practice tips, and encouragement. Let's get started!";
             default:
-                return "Use the top navigation: 📤 Upload for video analysis, 📹 Live for webcam recognition, 📚 Learn for structured lessons. Ask me anything along the way!";
+                return "👋 Hello! I'm SignHelper, your AI companion for learning Bangla sign language. "
+                        + "I'm here to help you navigate the app and improve your signing skills!";
         }
     }
 
-    private String getTechnicalSupportResponse(String pc) {
-        switch (pc) {
-            case "upload":
-                return "Upload troubles? Verify format (MP4/AVI/MOV), size <100 MB, stable internet, and try clearing cache or another browser.";
-            case "live":
-                return "Live Recognition issues? Check camera permissions, close other apps using camera, refresh page, try a different browser and ensure good lighting.";
-            case "learning":
-                return "Lesson page glitching? Refresh, check connection, clear cache or switch browsers. Let support know if it persists.";
-            default:
-                return "General tech tips: refresh page, check internet, clear cache, disable extensions or try a different browser.";
-        }
+    /**
+     * Database operations
+     */
+    private ChatConversation saveUserMessage(ChatMessage message, UUID userId) {
+        ChatConversation userConv = new ChatConversation();
+        userConv.setUserId(userId);
+        userConv.setLessonId(message.getLessonId());
+        userConv.setMessage(message.getContent().trim());
+        userConv.setSender("USER");
+        userConv.setContextData(message.getContextDataAsJson());
+        userConv.setCreatedAt(LocalDateTime.now());
+        return conversationRepository.save(userConv);
     }
 
-    private String getContextualDefaultResponse(String pc) {
-        switch (pc) {
-            case "upload":
-                return "Need help with uploads or AI analysis? Ask me about supported formats, file sizes, processing time or sign-language queries!";
-            case "live":
-                return "I can help with live recognition setup, accuracy tips or signing questions. What would you like to know?";
-            case "learning":
-                return "Ask me anything about the lesson content, practice techniques or Bangla sign-language culture!";
-            default:
-                return "I'm SignHelper! I can guide you through uploads, live recognition, lessons or any sign-language questions. How can I assist?";
-        }
+    private ChatConversation saveBotMessage(String content, ChatMessage originalMessage, UUID userId) {
+        ChatConversation botConv = new ChatConversation();
+        botConv.setUserId(userId);
+        botConv.setLessonId(originalMessage.getLessonId());
+        botConv.setMessage(content);
+        botConv.setSender("BOT");
+        botConv.setContextData(originalMessage.getContextDataAsJson());
+        botConv.setCreatedAt(LocalDateTime.now());
+        return conversationRepository.save(botConv);
     }
 
-    /* ──────────────────────────
-       Conversation utilities
-    ────────────────────────── */
+    private List<ChatConversation> getRecentHistory(UUID userId, Long lessonId) {
+        return conversationRepository
+                .findByUserIdAndLessonIdOrderByCreatedAtDesc(userId, lessonId)
+                .stream()
+                .limit(10)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Response creation helpers
+     */
+    private ChatResponse createSuccessResponse(String content) {
+        ChatResponse response = new ChatResponse();
+        response.setContent(content);
+        response.setSender("BOT");
+        response.setTimestamp(LocalDateTime.now());
+        response.setIsError(false);
+        return response;
+    }
+
+    private ChatResponse createErrorResponse(String message) {
+        ChatResponse response = new ChatResponse();
+        response.setContent(message);
+        response.setSender("BOT");
+        response.setTimestamp(LocalDateTime.now());
+        response.setIsError(true);
+        return response;
+    }
+
+    /**
+     * Public utility methods
+     */
     public List<ChatMessage> getConversationHistory(UUID userId, Long lessonId) {
         return conversationRepository
                 .findByUserIdAndLessonIdOrderByCreatedAtAsc(userId, lessonId)
                 .stream()
-                .map(conv -> {
-                    ChatMessage m = new ChatMessage();
-                    m.setContent(conv.getMessage());
-                    m.setSender(conv.getSender());
-                    m.setLessonId(conv.getLessonId());
-                    m.setTimestamp(conv.getCreatedAt());
-                    m.setContextData(conv.getContextData());
-                    return m;
-                }).collect(Collectors.toList());
+                .map(this::convertToMessage)
+                .collect(Collectors.toList());
     }
 
     public void clearConversation(UUID userId, Long lessonId) {
         conversationRepository.deleteByUserIdAndLessonId(userId, lessonId);
+        log.info("Cleared conversation for user {} and lesson {}", userId, lessonId);
     }
 
     public Long getUserMessageCount(UUID userId) {
         return conversationRepository.countUserMessagesByUser(userId);
+    }
+
+    private ChatMessage convertToMessage(ChatConversation conversation) {
+        ChatMessage message = new ChatMessage();
+        message.setContent(conversation.getMessage());
+        message.setSender(conversation.getSender());
+        message.setLessonId(conversation.getLessonId());
+        message.setTimestamp(conversation.getCreatedAt());
+        message.setContextData(conversation.getContextData());
+        return message;
     }
 }

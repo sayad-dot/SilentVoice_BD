@@ -48,8 +48,7 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
-        AuthenticationManagerBuilder auth
-                = http.getSharedObject(AuthenticationManagerBuilder.class);
+        AuthenticationManagerBuilder auth = http.getSharedObject(AuthenticationManagerBuilder.class);
         auth.authenticationProvider(daoAuthenticationProvider());
         return auth.build();
     }
@@ -57,46 +56,36 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF (stateless API)
                 .csrf(csrf -> csrf.disable())
-                // Enable CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // Stateless session - every request needs token
-                .sessionManagement(sm
-                        -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Authorization rules (order matters)
-                .authorizeHttpRequests(auth -> auth
-                // Public authentication endpoints
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/auth/**").permitAll()
-                // Allow preflight
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authz -> authz
+                // Allow unauthenticated access to these endpoints:
+                .requestMatchers("/api/debug/**").permitAll()
+                .requestMatchers("/api/auth/**", "/auth/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                // Allow AI status without auth
                 .requestMatchers("/api/ai/status").permitAll()
-                // Secure all other AI endpoints
+                .requestMatchers("/api/media/**").permitAll()
+                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/error").permitAll()
+                // These endpoints require authentication:
+                .requestMatchers("/api/learning/chat").authenticated()
                 .requestMatchers("/api/ai/**").authenticated()
-                // Video endpoints
                 .requestMatchers(HttpMethod.POST, "/api/videos/upload").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/info").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/status").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/videos/**").authenticated()
+                .requestMatchers("/api/audio/**").authenticated()
+                // Allow video stream/download without authentication:
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/stream").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/videos/*/download").permitAll()
-                // Audio endpoints
-                .requestMatchers("/api/audio/**").authenticated()
-                // Media and WebSocket
-                .requestMatchers("/api/media/**").permitAll()
-                .requestMatchers("/ws/**").permitAll()
-                // Swagger / OpenAPI
-                .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**")
-                .permitAll()
-                // All other requests require authentication
+                // Anything else requires authentication:
                 .anyRequest().authenticated()
                 )
-                // Add JWT filter
-                .addFilterBefore(jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authenticationProvider(daoAuthenticationProvider());
 
         return http.build();
@@ -116,8 +105,7 @@ public class SecurityConfig {
         config.setAllowedHeaders(Arrays.asList("*"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
-        UrlBasedCorsConfigurationSource source
-                = new UrlBasedCorsConfigurationSource();
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
     }
