@@ -269,3 +269,7 @@ pose_out.json
 *.tmp
 
 frontend/.env/
+
+python-ai/.env/
+
+.env/
