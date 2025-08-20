@@ -12,21 +12,21 @@
 
 ## ✨ Features
 
-- 🎥 **Video Upload & Management**: Upload, stream, and manage sign language videos
-- 🖼️ **Automatic Frame Extraction**: Efficiently extracts frames from uploaded videos for analysis
-- 🤲 **Pose Estimation**: Uses MediaPipe to extract hand and body landmarks from video frames
-- 🧠 **AI Sign Recognition**: LSTM-based model trained on Bangla sign datasets (e.g., BDSLW60) for high-accuracy gesture recognition
-- 🔗 **RESTful API**: Endpoints for video management, AI status, and prediction results
-- 🏗️ **Modular Design**: Python AI pipeline and Java backend are loosely coupled for easy updates
-- ⚡ **Async Processing**: Handles large video datasets and AI jobs efficiently
-- 🔧 **Extensible**: Easily add new sign classes, datasets, or AI models
+- **Video Upload & Management**: Upload, stream, and manage sign language videos
+- **Automatic Frame Extraction**: Efficiently extracts frames from uploaded videos for analysis
+- **Pose Estimation**: Uses MediaPipe to extract hand and body landmarks from video frames
+- **AI Sign Recognition**: LSTM-based model trained on Bangla sign datasets (e.g., BDSLW60) for high-accuracy gesture recognition
+- **RESTful API**: Endpoints for video management, AI status, and prediction results
+- **Modular Design**: Python AI pipeline and Java backend are loosely coupled for easy updates
+- **Async Processing**: Handles large video datasets and AI jobs efficiently
+- **Extensible**: Easily add new sign classes, datasets, or AI models
 
 ## 🚀 Installation
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/SilentVoice_BD.git
+git clone https://github.com/sayad-dot/SilentVoice_BD.git
 cd SilentVoice_BD
 ```
 
@@ -94,26 +94,41 @@ npm start
 ```
 SilentVoice_BD/
 ├── src/main/java/com/example/silentvoice_bd/
-│   ├── controller/           # REST controllers (video, AI)
-│   ├── service/             # Video and processing services
-│   ├── processing/          # Frame extraction logic
-│   ├── ai/                  # AI integration (services, models, DTOs)
-│   └── repository/          # JPA repositories
+│ ├── controller/      REST controllers (video, AI, auth, learning)
+│ │ 
+│ ├── service/         Business logic and AI integration services
+│ │ 
+│ ├── processing/      Frame extraction & video processing logic
+│ │
+│ ├── ai/              AI integration (models, DTOs, services)
+│ │ 
+│ └── repository/      Database repositories (JPA)
+│ 
 ├── python-ai/
-│   ├── scripts/             # Python scripts for pose extraction, prediction
-│   ├── models/              # LSTM and related model code
-│   ├── data/                # Training data, temp files
-│   └── trained_models/      # Saved AI models
+│ ├── scripts/         Python scripts (pose extraction, training, inference)
+│ │
+│ ├── models/          LSTM model code and configs
+│ │
+│ ├── data/            Preprocessed training data & configs
+│ │ 
+│ └── trained_models/  Saved ML models
+│ 
+│
 ├── uploads/
-│   ├── frames/              # Extracted video frames (ignored by git)
-│   ├── videos/              # Uploaded video files (ignored by git)
-│   └── thumbnails/          # Video thumbnails (ignored by git)
-├── dataset/                 # External datasets (ignored by git)
-├── frontend/                # React frontend application
+│ ├── videos/          Uploaded video files (gitignored)
+│ │ 
+│ ├── frames/          Extracted video frames (gitignored)
+│ │ 
+│ └── thumbnails/      Generated video thumbnails (gitignored)
+│
+├── dataset/           External datasets (gitignored)
+│ 
+├── frontend/          React frontend application
+│ 
 ├── .gitignore
-├── pom.xml
-├── requirements.txt
-└── README.md
+├── pom.xml Maven build configuration (Java backend)
+├── requirements.txt Python dependencies (AI service)
+└── README.md Project documentation
 ```
 
 ## 🧑‍💻 API Usage Examples
@@ -218,20 +233,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👤 Author
 
 **Sayad Ibna Azad**
-- 📧 Email: sayadkhan0555@gmail.com
-- 💼 LinkedIn: [Sayad Ibna Azad](https://www.linkedin.com/in/sayad-ibna-azad-181a03300/)
-- 🐙 GitHub: [sayad-dot](https://github.com/sayad-dot)
+- Email: sayadkhan0555@gmail.com
+- LinkedIn: [Sayad Ibna Azad](https://www.linkedin.com/in/sayad-ibna-azad-181a03300/)
+- GitHub: [sayad-dot](https://github.com/sayad-dot)
 
 ---
 
 ## ⭐ Show Your Support
 
 If you found this project helpful, please consider:
-- ⭐ **Starring the repository**
-- 🍴 **Forking for your own use**
-- 📢 **Sharing with others**
-- 🐛 **Reporting issues**
-- 💡 **Suggesting improvements**
+- **Starring the repository**
+- **Forking for your own use**
+- **Sharing with others**
+- **Reporting issues**
+- **Suggesting improvements**
 
 **Made with ❤️ for the Bangla sign language community**
 
