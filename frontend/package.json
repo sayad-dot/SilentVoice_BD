@@ -4,6 +4,7 @@
   "private": true,
   "proxy": "http://localhost:8080",
   "dependencies": {
+    "@ant-design/icons": "^6.0.0",
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/pose": "^0.5.1675469404",
     "@stomp/stompjs": "^7.0.0",
@@ -11,7 +12,8 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
-    "axios": "^1.10.0",
+    "antd": "^5.27.1",
+    "axios": "^1.11.0",
     "framer-motion": "^12.23.12",
     "google-auth-library": "^9.15.1",
     "jwt-decode": "^4.0.0",
@@ -20,6 +22,7 @@
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.7.1",
     "react-scripts": "5.0.1",
+    "recharts": "^3.1.2",
     "sockjs-client": "^1.6.1",
     "web-vitals": "^2.1.4"
   },

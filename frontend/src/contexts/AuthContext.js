@@ -13,6 +13,17 @@ export const useAuth = () => {
   return context;
 };
 
+// Helper function to decode JWT and extract roles
+const parseJwtPayload = (token) => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload;
+  } catch (error) {
+    console.error('Error parsing JWT:', error);
+    return null;
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,16 +34,16 @@ export const AuthProvider = ({ children }) => {
       const token = getToken();
       if (token) {
         try {
-          // Validate token by checking if it's expired
-          const payload = JSON.parse(atob(token.split('.')[1]));
+          const payload = parseJwtPayload(token);
           const currentTime = Date.now() / 1000;
-
-          if (payload.exp > currentTime) {
-            // Token is valid, extract user info
+          
+          if (payload && payload.exp > currentTime) {
+            // Token is valid, extract user info including roles
             setUser({
               email: payload.sub,
               fullName: localStorage.getItem('userFullName') || payload.sub,
-              profilePicture: localStorage.getItem('userProfilePicture') || null
+              profilePicture: localStorage.getItem('userProfilePicture') || null,
+              roles: payload.roles || [] // Extract roles from JWT
             });
           } else {
             // Token expired
@@ -53,16 +64,28 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  // Existing traditional login
+  // Helper function to update user from JWT token
+  const updateUserFromToken = (token, additionalData = {}) => {
+    const payload = parseJwtPayload(token);
+    if (payload) {
+      setUser({
+        email: payload.sub,
+        roles: payload.roles || [], // Extract roles from JWT
+        ...additionalData
+      });
+    }
+  };
+
+  // Traditional login
   const login = async (email, password) => {
     try {
       setError('');
       setLoading(true);
 
       const response = await authService.login(email, password);
-
-      setUser({
-        email: email,
+      
+      // Update user with roles from JWT
+      updateUserFromToken(response.token, {
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
       });
@@ -80,7 +103,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // NEW: Google Login
+  // Google Login
   const loginWithGoogle = async (googleUserData) => {
     try {
       setError('');
@@ -89,7 +112,8 @@ export const AuthProvider = ({ children }) => {
       console.log('🔐 Processing Google login in AuthContext...');
       const response = await authService.googleLogin(googleUserData);
 
-      setUser({
+      // Update user with roles from JWT
+      updateUserFromToken(response.token, {
         email: googleUserData.email,
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
@@ -107,7 +131,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Existing traditional registration
+  // Traditional registration
   const register = async (userData) => {
     try {
       setError('');
@@ -124,7 +148,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // NEW: Google Registration
+  // Google Registration
   const registerWithGoogle = async (googleUserData) => {
     try {
       setError('');
@@ -133,7 +157,8 @@ export const AuthProvider = ({ children }) => {
       console.log('🔐 Processing Google registration in AuthContext...');
       const response = await authService.googleRegister(googleUserData);
 
-      setUser({
+      // Update user with roles from JWT
+      updateUserFromToken(response.token, {
         email: googleUserData.email,
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
@@ -186,4 +211,5 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
 

@@ -70,6 +70,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/error").permitAll()
+                // Admin endpoints require ADMIN role:                       
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // These endpoints require authentication:
                 .requestMatchers("/api/learning/chat").authenticated()
                 .requestMatchers("/api/ai/**").authenticated()

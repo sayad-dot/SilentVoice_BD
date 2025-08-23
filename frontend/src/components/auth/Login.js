@@ -1,5 +1,6 @@
-// components/auth/Login.js - UPDATED VERSION
-import React, { useState } from 'react';
+// components/auth/Login.js - MERGED VERSION WITH NAVIGATION
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getValidationErrors } from '../../utils/validation';
 import AuthLayout from './AuthLayout';
@@ -17,6 +18,10 @@ const Login = ({ onSwitchToRegister }) => {
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  // Navigation hooks
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -54,11 +59,8 @@ const Login = ({ onSwitchToRegister }) => {
     
     // Attempt login
     const result = await login(formData.email, formData.password);
-    if (!result.success) {
-      // Error is handled by AuthContext
-      console.error('Login failed:', result.error);
-    } else {
-      // Handle remember me functionality if needed
+    if (result.success) {
+      // Handle remember me functionality
       if (rememberMe) {
         localStorage.setItem('rememberMe', 'true');
         localStorage.setItem('lastEmail', formData.email);
@@ -66,30 +68,42 @@ const Login = ({ onSwitchToRegister }) => {
         localStorage.removeItem('rememberMe');
         localStorage.removeItem('lastEmail');
       }
+
+      // Redirect based on user role
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
+    } else {
+      console.error('Login failed:', result.error);
     }
   };
 
-  // 🔥 UPDATED: Better Google login handlers
+  // Updated Google login handler with navigation
   const handleGoogleSuccess = async (user, token) => {
     console.log('✅ Google login successful:', user.email);
-    // The loginWithGoogle is already called automatically by GoogleLoginButton
-    // Just handle any additional success logic here if needed
     
     // Optional: Handle remember me for Google login
     if (rememberMe) {
       localStorage.setItem('rememberMe', 'true');
       localStorage.setItem('lastEmail', user.email);
     }
+
+    // Redirect based on role or previous location
+    const from = location.state?.from?.pathname || '/';
+    const isAdmin = user.roles?.includes('ADMIN');
+    
+    if (isAdmin) {
+      navigate('/admin');
+    } else {
+      navigate(from, { replace: true });
+    }
   };
 
   const handleGoogleError = (errorMessage) => {
     console.error('❌ Google login failed:', errorMessage);
-    // Error display is handled by AuthContext through the error state
-    // But you can add additional error handling here if needed
   };
 
   // Load remembered email on component mount
-  React.useEffect(() => {
+  useEffect(() => {
     const remembered = localStorage.getItem('rememberMe');
     const lastEmail = localStorage.getItem('lastEmail');
     
@@ -151,7 +165,7 @@ const Login = ({ onSwitchToRegister }) => {
           {formErrors.password && <span className="error-text">{formErrors.password}</span>}
         </div>
 
-        {/* FORM OPTIONS - Updated */}
+        {/* FORM OPTIONS */}
         <div className="form-options">
           <label className="checkbox-container">
             <input 
@@ -166,7 +180,6 @@ const Login = ({ onSwitchToRegister }) => {
             type="button" 
             className="forgot-link"
             onClick={() => {
-              // TODO: Implement forgot password functionality
               console.log('Forgot password clicked');
             }}
           >
@@ -185,7 +198,7 @@ const Login = ({ onSwitchToRegister }) => {
           ) : (
             <>
               <span>Sign In</span>
-              <div className="btn-icon">🚀</div>
+              <div className="btn-icon"></div>
             </>
           )}
         </button>
@@ -195,7 +208,7 @@ const Login = ({ onSwitchToRegister }) => {
           <span>or continue with</span>
         </div>
 
-        {/* SOCIAL LOGIN - Updated */}
+        {/* SOCIAL LOGIN */}
         <div className="social-login">
           <GoogleLoginButton 
             mode="login"
@@ -203,11 +216,6 @@ const Login = ({ onSwitchToRegister }) => {
             onError={handleGoogleError}
             disabled={loading}
           />
-          {/* 
-          <button type="button" className="social-btn facebook" disabled>
-            <FaFacebookF className="social-icon" />
-          </button>
-          */}
         </div>
       </form>
 
