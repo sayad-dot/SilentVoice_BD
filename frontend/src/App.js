@@ -15,6 +15,7 @@ import AuditLogs from './components/admin/AuditLogs';
 import SupportTickets from './components/admin/SupportTickets';
 import FeatureFlags from './components/admin/FeatureFlags';
 import UserManagement from './components/admin/UserManagement';
+import ContentManagement from './components/admin/ContentManagement';
 import './App.css';
 
 // Component to require authentication
@@ -370,6 +371,7 @@ const AdminDashboard = () => {
           <Route path="/tickets" element={<SupportTickets />} />
           <Route path="/flags" element={<FeatureFlags />} />
           <Route path="/users" element={<UserManagement />} />
+          <Route path="/content" element={<ContentManagement />} />
           <Route path="/" element={<Navigate to="/admin/audit" replace />} />
           <Route path="*" element={<Navigate to="/admin/audit" replace />} />
         </Routes>

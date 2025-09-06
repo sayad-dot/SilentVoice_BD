@@ -1,10 +1,9 @@
-// components/common/Header.js - MERGED VERSION WITH NAVIGATION
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 const Header = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -14,47 +13,83 @@ const Header = () => {
     }
   };
 
-  const goToAdmin = () => {
-    navigate('/admin');
-  };
-
-  const goToHome = () => {
-    navigate('/');
-  };
-
   return (
-    <header className="app-header">
-      <div className="header-content">
-        <div className="header-left">
-          <div className="logo" onClick={goToHome} style={{ cursor: 'pointer' }}>
-            <span className="logo-icon">🎯</span>
-            <span className="logo-text">SilentVoice BD</span>
-          </div>
-        </div>
+    <header style={{
+      backgroundColor: '#4a90e2',
+      padding: '1rem 2rem',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1000
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        {/* Left Side - Logo */}
+        <h1 
+          onClick={() => navigate('/')} 
+          style={{ 
+            cursor: 'pointer',
+            color: 'white',
+            margin: 0,
+            fontSize: '1.5rem',
+            fontWeight: 'bold'
+          }}
+        >
+          🤟 SilentVoice BD
+        </h1>
 
-        <div className="header-right">
+        {/* Right Side - Admin + User Info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* 🎯 ONLY ADMIN PANEL BUTTON - No other buttons */}
+          {isAdmin && (
+            <button 
+              onClick={() => navigate('/admin')}
+              style={{
+                backgroundColor: '#dc3545',
+                color: 'white',
+                border: 'none',
+                padding: '0.5rem 1rem',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 5px rgba(220, 53, 69, 0.3)'
+              }}
+            >
+              ⚙️ Admin Panel
+            </button>
+          )}
+
+          {/* User Info */}
           {user && (
-            <div className="user-info">
-              <div className="user-details">
-                <span className="welcome-text">Welcome, </span>
-                <span className="user-name">{user.fullName}</span>
-              </div>
-              
-              <div className="header-actions">
-                {user.roles?.includes('ADMIN') && (
-                  <button onClick={goToAdmin} className="admin-btn">
-                    ⚙️ Admin Panel
-                  </button>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="logout-btn"
-                  title="Logout"
-                >
-                  🚪 Logout
-                </button>
-              </div>
-            </div>
+            <>
+              <span style={{ 
+                color: 'white', 
+                fontSize: '0.9rem',
+                fontWeight: '500'
+              }}>
+                Welcome, {user.fullName}!
+              </span>
+              <button 
+                onClick={handleLogout}
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '5px',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+              >
+                Logout
+              </button>
+            </>
           )}
         </div>
       </div>

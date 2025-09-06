@@ -2,8 +2,7 @@ import React from 'react';
 import { Layout, Menu } from 'antd';
 import {
   UserOutlined,
-  ExceptionOutlined,
-  ControlOutlined
+  FileOutlined
 } from '@ant-design/icons';
 import './AdminLayout.css';
 
@@ -19,19 +18,18 @@ export default function AdminLayout({ selectedKey, onSelect, children }) {
           selectedKeys={[selectedKey]}
           onClick={({ key }) => onSelect(key)}
         >
-          <Menu.Item key="audit" icon={<ExceptionOutlined />}>
-            Audit Logs
+          <Menu.Item key="users" icon={<UserOutlined />}>
+            User Management
           </Menu.Item>
-          <Menu.Item key="tickets" icon={<UserOutlined />}>
-            Support Tickets
-          </Menu.Item>
-          <Menu.Item key="flags" icon={<ControlOutlined />}>
-            Feature Flags
+          <Menu.Item key="content" icon={<FileOutlined />}>
+            Content Management
           </Menu.Item>
         </Menu>
       </Sider>
       <Layout>
-        <Content style={{ margin: '16px' }}>{children}</Content>
+        <Content style={{ margin: '16px' }}>
+          {children}
+        </Content>
       </Layout>
     </Layout>
   );

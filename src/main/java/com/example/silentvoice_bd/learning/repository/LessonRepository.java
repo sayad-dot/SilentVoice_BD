@@ -26,4 +26,7 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
 
     @Query("SELECT AVG(l.estimatedDuration) FROM Lesson l WHERE l.lessonType = :lessonType")
     Double getAverageEstimatedDurationByType(String lessonType);
+
+    // ❌ REMOVED: Long countByIsActive(Boolean isActive); 
+    // This method was causing the error because your Lesson entity doesn't have an 'isActive' field
 }

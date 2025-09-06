@@ -17,9 +17,7 @@ import com.example.silentvoice_bd.auth.dto.AuthRequest;
 import com.example.silentvoice_bd.auth.dto.AuthResponse;
 import com.example.silentvoice_bd.auth.dto.OAuth2UserInfo;
 import com.example.silentvoice_bd.auth.dto.RegisterRequest;
-import com.example.silentvoice_bd.auth.model.Role;
 import com.example.silentvoice_bd.auth.model.User;
-import com.example.silentvoice_bd.auth.repository.RoleRepository;
 import com.example.silentvoice_bd.auth.repository.UserRepository;
 import com.example.silentvoice_bd.auth.security.JwtTokenProvider;
 
@@ -33,7 +31,6 @@ public class AuthService {
     private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthenticationManager authenticationManager;
@@ -67,13 +64,10 @@ public class AuthService {
                 request.getFullName()
         );
 
-        // Set default role
-        Optional<Role> userRole = roleRepository.findByName("USER");
-        if (userRole.isPresent()) {
-            Set<Role> roles = new HashSet<>();
-            roles.add(userRole.get());
-            user.setRoles(roles);
-        }
+        // Set default role using User.UserRole enum
+        Set<User.UserRole> roles = new HashSet<>();
+        roles.add(User.UserRole.USER);
+        user.setRoles(roles);
 
         User savedUser = userRepository.save(user);
         String token = jwtTokenProvider.generateToken(savedUser);
@@ -153,13 +147,10 @@ public class AuthService {
         // Set email as verified for Google users
         user.setEmailVerified(true);
 
-        // Set default role
-        Optional<Role> userRole = roleRepository.findByName("USER");
-        if (userRole.isPresent()) {
-            Set<Role> roles = new HashSet<>();
-            roles.add(userRole.get());
-            user.setRoles(roles);
-        }
+        // Set default role using User.UserRole enum
+        Set<User.UserRole> roles = new HashSet<>();
+        roles.add(User.UserRole.USER);
+        user.setRoles(roles);
 
         User savedUser = userRepository.save(user);
         String token = jwtTokenProvider.generateToken(savedUser);

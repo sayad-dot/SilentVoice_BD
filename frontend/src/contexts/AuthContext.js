@@ -5,14 +5,6 @@ import { getToken, removeToken } from '../utils/tokenStorage';
 
 const AuthContext = createContext();
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
-
 // Helper function to decode JWT and extract roles
 const parseJwtPayload = (token) => {
   try {
@@ -22,6 +14,24 @@ const parseJwtPayload = (token) => {
     console.error('Error parsing JWT:', error);
     return null;
   }
+};
+
+// 🎯 NEW: Admin access checker function
+const checkAdminAccess = (user) => {
+  if (!user) return false;
+  
+  // Check hardcoded admin email
+  const adminEmails = ['sayadibnaazad@iut-dhaka.edu'];
+  if (adminEmails.includes(user.email?.toLowerCase())) {
+    return true;
+  }
+  
+  // Check roles from JWT
+  if (user.roles && user.roles.includes('ADMIN')) {
+    return true;
+  }
+  
+  return false;
 };
 
 export const AuthProvider = ({ children }) => {
@@ -36,7 +46,6 @@ export const AuthProvider = ({ children }) => {
         try {
           const payload = parseJwtPayload(token);
           const currentTime = Date.now() / 1000;
-          
           if (payload && payload.exp > currentTime) {
             // Token is valid, extract user info including roles
             setUser({
@@ -60,7 +69,6 @@ export const AuthProvider = ({ children }) => {
       }
       setLoading(false);
     };
-
     initAuth();
   }, []);
 
@@ -81,18 +89,12 @@ export const AuthProvider = ({ children }) => {
     try {
       setError('');
       setLoading(true);
-
       const response = await authService.login(email, password);
-      
-      // Update user with roles from JWT
       updateUserFromToken(response.token, {
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
       });
-
-      // Store user's full name for display
       localStorage.setItem('userFullName', response.fullName);
-
       return { success: true };
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'Login failed';
@@ -108,17 +110,13 @@ export const AuthProvider = ({ children }) => {
     try {
       setError('');
       setLoading(true);
-
       console.log('🔐 Processing Google login in AuthContext...');
       const response = await authService.googleLogin(googleUserData);
-
-      // Update user with roles from JWT
       updateUserFromToken(response.token, {
         email: googleUserData.email,
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
       });
-
       console.log('✅ Google login successful in AuthContext');
       return { success: true };
     } catch (err) {
@@ -136,7 +134,6 @@ export const AuthProvider = ({ children }) => {
     try {
       setError('');
       setLoading(true);
-
       await authService.register(userData);
       return { success: true };
     } catch (err) {
@@ -153,17 +150,13 @@ export const AuthProvider = ({ children }) => {
     try {
       setError('');
       setLoading(true);
-
       console.log('🔐 Processing Google registration in AuthContext...');
       const response = await authService.googleRegister(googleUserData);
-
-      // Update user with roles from JWT
       updateUserFromToken(response.token, {
         email: googleUserData.email,
         fullName: response.fullName,
         profilePicture: response.profilePicture || null
       });
-
       console.log('✅ Google registration successful in AuthContext');
       return { success: true };
     } catch (err) {
@@ -178,12 +171,10 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Sign out from Google if signed in
       await googleAuthService.signOut();
     } catch (error) {
       console.warn('Google sign out error:', error);
     }
-
     authService.logout();
     setUser(null);
     localStorage.removeItem('userFullName');
@@ -192,6 +183,7 @@ export const AuthProvider = ({ children }) => {
 
   const clearError = () => setError('');
 
+  // 🎯 UPDATED: Add isAdmin to the context value
   const value = {
     user,
     loading,
@@ -202,7 +194,8 @@ export const AuthProvider = ({ children }) => {
     registerWithGoogle,
     logout,
     clearError,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    isAdmin: checkAdminAccess(user) // ⭐ NEW: This was missing!
   };
 
   return (
@@ -212,4 +205,11 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
