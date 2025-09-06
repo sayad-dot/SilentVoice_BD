@@ -8,7 +8,7 @@
 
 ## 📋 Project Overview
 
-**SilentVoice_BD** is an open-source, full-stack platform for recognizing Bangla sign language from video. It combines a modern Java Spring Boot backend, Python AI (MediaPipe + LSTM), and a React frontend to enable video upload, automatic frame extraction, pose estimation, and accurate sign language translation. The project aims to make Bangla sign language accessible for education, communication, and research.
+**SilentVoice_BD** is an open-source, full-stack platform for recognizing Bangla sign language from video. It combines a modern Java Spring Boot backend, Python AI (MediaPipe + Bi-LSTM), and a React frontend to enable video upload, automatic frame extraction, pose estimation, and accurate sign language translation. The project aims to make Bangla sign language accessible for education, communication, and research.
 
 ## ✨ Features
 
